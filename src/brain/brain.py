@@ -1,5 +1,6 @@
 from .providers import OllamaProvider
 
+
 class Brain:
     def __init__(self, provider):
         self.provider = provider
@@ -10,35 +11,36 @@ class Brain:
     def should_remember(self, text: str) -> bool:
 
         prompt = f"""
-You are a memory classifier.
+Should this be stored as a long-term memory?
 
-Should this information be stored as long-term memory?
-
-Store things like:
-- user's preferences
-- goals
-- plans
-- personal information
-- recurring habits
-
-Do NOT store:
-- temporary conversation
-- greetings
-- random questions
-- one-time requests
-
-Reply ONLY with:
-
-YES
-
-or
-
-NO
+Reply ONLY yes or no.
 
 Text:
 {text}
 """
 
-        answer = self.provider.generate(prompt).strip().upper()
+        answer = self.provider.generate(prompt).lower()
 
-        return answer.startswith("YES")
+        return "yes" in answer
+
+    def internal_monologue(self):
+
+        prompt = """
+You are Nel.
+
+You are thinking to yourself.
+
+Nobody will read this immediately.
+
+Write ONE short internal thought.
+
+Do not answer the user.
+
+Do not explain.
+
+Only write the thought.
+
+Always write in Azerbaijani.
+"""
+
+        return self.provider.generate(prompt)
