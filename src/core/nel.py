@@ -3,7 +3,6 @@ from src.brain.providers import OllamaProvider
 from src.core.config import MODEL_NAME
 
 from src.memory.memory import Memory
-from src.memory.thoughts import Thoughts
 
 from src.core.state_manager import StateManager
 from src.core.state import State
@@ -11,6 +10,7 @@ from src.core.clock import Clock
 from src.core.decision_engine import DecisionEngine
 
 from src.events.event_bus import EventBus
+from src.services.thought_service import ThoughtService
 
 
 class Nel:
@@ -22,11 +22,12 @@ class Nel:
         self.brain = Brain(provider)
 
         self.memory = Memory()
-        self.thoughts = Thoughts()
 
         self.state = StateManager()
 
         self.decision = DecisionEngine()
+
+        self.thought_service = ThoughtService(self.brain)
 
         self.events = EventBus()
         self.events.subscribe("clock_tick", self.on_clock_tick)
@@ -75,8 +76,4 @@ Nel:
         if not self.decision.should_think():
             return
 
-        thought = self.brain.internal_monologue()
-
-        self.thoughts.add(thought)
-
-        print("[THOUGHT]", thought)
+        self.thought_service.generate()
