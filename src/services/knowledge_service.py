@@ -21,14 +21,8 @@ class KnowledgeService:
     def get(self, key):
         return self.knowledge.get(key)
 
+    def facts(self):
+        return self.knowledge.load()
+
     def answer(self, text):
-
-        text = text.lower()
-
-        if "anime" in text:
-            anime = self.get("favorite_anime")
-
-            if anime:
-                return f"Sənin ən sevdiyin anime {anime}-dir."
-
         return None

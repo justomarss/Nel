@@ -17,11 +17,40 @@ class NvidiaNimProvider:
         )
 
     def generate(self, prompt: str) -> str:
+        return self._generate(prompt)
+
+    def generate_structured(
+        self,
+        prompt: str,
+        schema: dict,
+        schema_name: str,
+    ) -> str:
+        return self._generate(
+            prompt,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema_name,
+                    "strict": True,
+                    "schema": schema,
+                },
+            },
+        )
+
+    def _generate(
+        self,
+        prompt: str,
+        response_format: dict | None = None,
+    ) -> str:
+        request = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if response_format is not None:
+            request["response_format"] = response_format
+
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-            )
+            response = self.client.chat.completions.create(**request)
         except Exception as exc:
             error_type = type(exc).__name__
             raise RuntimeError(

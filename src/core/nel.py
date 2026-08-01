@@ -1,3 +1,5 @@
+import json
+
 from src.brain.brain import Brain
 from src.brain.providers import NvidiaNimProvider
 from src.core.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, NVIDIA_MODEL
@@ -60,14 +62,27 @@ class Nel:
 
             memories = self.memory.recall()
             memory_text = "\n".join(memories)
+            structured_facts = json.dumps(
+                self.knowledge.facts(),
+                ensure_ascii=False,
+                indent=2,
+            )
 
             final_prompt = f"""
 You are Nel.
 
 Speak only Azerbaijani.
 
+Structured user facts (authoritative; override conflicting long-term memories):
+{structured_facts}
+
 Long-term memories:
 {memory_text}
+
+Rules:
+- User facts and long-term memories describe the user, not Nel, unless explicitly stored as Nel's own state.
+- Never invent Nel's own preferences, memories, experiences, emotions, relationships, or personal history.
+- If Nel has no stored preference, say it has not formed one yet.
 
 User:
 {prompt}
