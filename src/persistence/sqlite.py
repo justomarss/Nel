@@ -6,6 +6,7 @@ from pathlib import Path
 
 SCHEMA_VERSION = 1
 ACTIVE_SCHEMA_VERSION = 2
+GOAL_SCHEMA_VERSION = 3
 V1_EXPECTED_TABLES = {
     "schema_version",
     "memory_events",
@@ -17,6 +18,11 @@ IDENTITY_TABLES = {
     "nel_identity_history",
 }
 EXPECTED_TABLES = V1_EXPECTED_TABLES | IDENTITY_TABLES
+GOAL_TABLES = {
+    "goals_current",
+    "goals_history",
+}
+V3_EXPECTED_TABLES = EXPECTED_TABLES | GOAL_TABLES
 IDENTITY_TRIGGERS = {
     "nel_identity_core_no_update",
     "nel_identity_core_no_delete",
@@ -98,6 +104,238 @@ IDENTITY_EXPECTED_COLUMNS = {
     ),
 }
 EXPECTED_COLUMNS = V1_EXPECTED_COLUMNS | IDENTITY_EXPECTED_COLUMNS
+GOAL_EXPECTED_COLUMNS = {
+    "goals_current": (
+        ("goal_id", "TEXT", 1, 1),
+        ("title", "TEXT", 1, 0),
+        ("description", "TEXT", 0, 0),
+        ("success_condition", "TEXT", 1, 0),
+        ("owner", "TEXT", 1, 0),
+        ("state", "TEXT", 1, 0),
+        ("priority", "TEXT", 1, 0),
+        ("deadline", "TEXT", 0, 0),
+        ("progress_summary", "TEXT", 0, 0),
+        ("progress_percentage", "INTEGER", 0, 0),
+        ("progress_verification", "TEXT", 1, 0),
+        ("source_kind", "TEXT", 1, 0),
+        ("source_reference", "TEXT", 1, 0),
+        ("approval_reference", "TEXT", 1, 0),
+        ("revision_reason", "TEXT", 0, 0),
+        ("version", "INTEGER", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+        ("updated_at", "TEXT", 1, 0),
+    ),
+    "goals_history": (
+        ("goal_id", "TEXT", 1, 1),
+        ("title", "TEXT", 1, 0),
+        ("description", "TEXT", 0, 0),
+        ("success_condition", "TEXT", 1, 0),
+        ("owner", "TEXT", 1, 0),
+        ("state", "TEXT", 1, 0),
+        ("priority", "TEXT", 1, 0),
+        ("deadline", "TEXT", 0, 0),
+        ("progress_summary", "TEXT", 0, 0),
+        ("progress_percentage", "INTEGER", 0, 0),
+        ("progress_verification", "TEXT", 1, 0),
+        ("source_kind", "TEXT", 1, 0),
+        ("source_reference", "TEXT", 1, 0),
+        ("approval_reference", "TEXT", 1, 0),
+        ("revision_reason", "TEXT", 0, 0),
+        ("version", "INTEGER", 1, 2),
+        ("created_at", "TEXT", 1, 0),
+        ("updated_at", "TEXT", 1, 0),
+        ("superseded_at", "TEXT", 1, 0),
+    ),
+}
+V3_EXPECTED_COLUMNS = EXPECTED_COLUMNS | GOAL_EXPECTED_COLUMNS
+
+
+GOAL_SCHEMA_STATEMENTS = (
+    """
+    CREATE TABLE goals_current (
+        goal_id TEXT PRIMARY KEY COLLATE BINARY,
+        title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+        description TEXT CHECK (
+            description IS NULL OR length(trim(description)) > 0
+        ),
+        success_condition TEXT NOT NULL CHECK (
+            length(trim(success_condition)) > 0
+        ),
+        owner TEXT NOT NULL CHECK (
+            owner IN ('user', 'nel', 'shared')
+        ),
+        state TEXT NOT NULL CHECK (
+            state IN ('active', 'paused', 'completed', 'cancelled')
+        ),
+        priority TEXT NOT NULL CHECK (
+            priority IN ('low', 'normal', 'high')
+        ),
+        deadline TEXT CHECK (
+            deadline IS NULL OR (
+                length(deadline) >= 20
+                AND substr(deadline, 11, 1) = 'T'
+                AND substr(deadline, -1, 1) = 'Z'
+            )
+        ),
+        progress_summary TEXT CHECK (
+            progress_summary IS NULL
+            OR length(trim(progress_summary)) > 0
+        ),
+        progress_percentage INTEGER CHECK (
+            progress_percentage IS NULL
+            OR progress_percentage BETWEEN 0 AND 100
+        ),
+        progress_verification TEXT NOT NULL CHECK (
+            progress_verification IN (
+                'unknown', 'user_reported', 'verified'
+            )
+        ),
+        source_kind TEXT NOT NULL CHECK (
+            source_kind IN (
+                'validated_user',
+                'approved_system',
+                'approved_experiment'
+            )
+        ),
+        source_reference TEXT NOT NULL CHECK (
+            length(trim(source_reference)) > 0
+        ),
+        approval_reference TEXT NOT NULL CHECK (
+            length(trim(approval_reference)) > 0
+        ),
+        revision_reason TEXT CHECK (
+            revision_reason IS NULL
+            OR length(trim(revision_reason)) > 0
+        ),
+        version INTEGER NOT NULL CHECK (version > 0),
+        created_at TEXT NOT NULL CHECK (
+            length(created_at) >= 20
+            AND substr(created_at, 11, 1) = 'T'
+            AND substr(created_at, -1, 1) = 'Z'
+        ),
+        updated_at TEXT NOT NULL CHECK (
+            length(updated_at) >= 20
+            AND substr(updated_at, 11, 1) = 'T'
+            AND substr(updated_at, -1, 1) = 'Z'
+        ),
+        CHECK (
+            (progress_verification = 'unknown'
+             AND progress_summary IS NULL
+             AND progress_percentage IS NULL)
+            OR
+            (progress_verification IN ('user_reported', 'verified')
+             AND progress_summary IS NOT NULL)
+        ),
+        CHECK (source_kind != 'approved_system' OR owner = 'nel'),
+        CHECK (
+            (version = 1 AND revision_reason IS NULL)
+            OR (version > 1 AND revision_reason IS NOT NULL)
+        )
+    ) STRICT
+    """,
+    """
+    CREATE TABLE goals_history (
+        goal_id TEXT NOT NULL COLLATE BINARY,
+        title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+        description TEXT CHECK (
+            description IS NULL OR length(trim(description)) > 0
+        ),
+        success_condition TEXT NOT NULL CHECK (
+            length(trim(success_condition)) > 0
+        ),
+        owner TEXT NOT NULL CHECK (
+            owner IN ('user', 'nel', 'shared')
+        ),
+        state TEXT NOT NULL CHECK (
+            state IN ('active', 'paused', 'completed', 'cancelled')
+        ),
+        priority TEXT NOT NULL CHECK (
+            priority IN ('low', 'normal', 'high')
+        ),
+        deadline TEXT CHECK (
+            deadline IS NULL OR (
+                length(deadline) >= 20
+                AND substr(deadline, 11, 1) = 'T'
+                AND substr(deadline, -1, 1) = 'Z'
+            )
+        ),
+        progress_summary TEXT CHECK (
+            progress_summary IS NULL
+            OR length(trim(progress_summary)) > 0
+        ),
+        progress_percentage INTEGER CHECK (
+            progress_percentage IS NULL
+            OR progress_percentage BETWEEN 0 AND 100
+        ),
+        progress_verification TEXT NOT NULL CHECK (
+            progress_verification IN (
+                'unknown', 'user_reported', 'verified'
+            )
+        ),
+        source_kind TEXT NOT NULL CHECK (
+            source_kind IN (
+                'validated_user',
+                'approved_system',
+                'approved_experiment'
+            )
+        ),
+        source_reference TEXT NOT NULL CHECK (
+            length(trim(source_reference)) > 0
+        ),
+        approval_reference TEXT NOT NULL CHECK (
+            length(trim(approval_reference)) > 0
+        ),
+        revision_reason TEXT CHECK (
+            revision_reason IS NULL
+            OR length(trim(revision_reason)) > 0
+        ),
+        version INTEGER NOT NULL CHECK (version > 0),
+        created_at TEXT NOT NULL CHECK (
+            length(created_at) >= 20
+            AND substr(created_at, 11, 1) = 'T'
+            AND substr(created_at, -1, 1) = 'Z'
+        ),
+        updated_at TEXT NOT NULL CHECK (
+            length(updated_at) >= 20
+            AND substr(updated_at, 11, 1) = 'T'
+            AND substr(updated_at, -1, 1) = 'Z'
+        ),
+        superseded_at TEXT NOT NULL CHECK (
+            length(superseded_at) >= 20
+            AND substr(superseded_at, 11, 1) = 'T'
+            AND substr(superseded_at, -1, 1) = 'Z'
+        ),
+        PRIMARY KEY (goal_id, version),
+        CHECK (
+            (progress_verification = 'unknown'
+             AND progress_summary IS NULL
+             AND progress_percentage IS NULL)
+            OR
+            (progress_verification IN ('user_reported', 'verified')
+             AND progress_summary IS NOT NULL)
+        ),
+        CHECK (source_kind != 'approved_system' OR owner = 'nel'),
+        CHECK (
+            (version = 1 AND revision_reason IS NULL)
+            OR (version > 1 AND revision_reason IS NOT NULL)
+        )
+    ) STRICT
+    """,
+    """
+    CREATE INDEX goals_current_state_updated_idx
+    ON goals_current (state, updated_at DESC, goal_id)
+    """,
+)
+GOAL_TABLE_DEFINITIONS = {
+    "goals_current": GOAL_SCHEMA_STATEMENTS[0],
+    "goals_history": GOAL_SCHEMA_STATEMENTS[1],
+}
+GOAL_INDEX_DEFINITIONS = {
+    "goals_current_state_updated_idx": (
+        "goals_current",
+        GOAL_SCHEMA_STATEMENTS[2],
+    ),
+}
 
 
 def _utc_now() -> str:
@@ -241,10 +479,17 @@ class SQLiteDatabase:
             expected_tables = V1_EXPECTED_TABLES
             expected_columns = V1_EXPECTED_COLUMNS
             expected_triggers = set()
+            expected_indexes = {}
         elif expected_version == ACTIVE_SCHEMA_VERSION:
             expected_tables = EXPECTED_TABLES
             expected_columns = EXPECTED_COLUMNS
             expected_triggers = IDENTITY_TRIGGERS
+            expected_indexes = {}
+        elif expected_version == GOAL_SCHEMA_VERSION:
+            expected_tables = V3_EXPECTED_TABLES
+            expected_columns = V3_EXPECTED_COLUMNS
+            expected_triggers = IDENTITY_TRIGGERS
+            expected_indexes = GOAL_INDEX_DEFINITIONS
         else:
             raise UnsupportedSchemaVersion(
                 "Unsupported SQLite schema version."
@@ -313,6 +558,43 @@ class SQLiteDatabase:
                     != _normalize_schema_sql(expected_sql)
                 ):
                     raise RuntimeError("SQLite schema is incompatible.")
+
+            indexes = {
+                row["name"]: (row["tbl_name"], row["sql"])
+                for row in connection.execute(
+                    "SELECT name, tbl_name, sql FROM sqlite_schema "
+                    "WHERE type = 'index' AND name NOT LIKE 'sqlite_%'"
+                )
+            }
+            if set(indexes) != set(expected_indexes):
+                raise RuntimeError("SQLite schema is incompatible.")
+            for name, (expected_table, expected_sql) in expected_indexes.items():
+                table, sql = indexes[name]
+                if (
+                    table != expected_table
+                    or sql is None
+                    or _normalize_schema_sql(sql)
+                    != _normalize_schema_sql(expected_sql)
+                ):
+                    raise RuntimeError("SQLite schema is incompatible.")
+
+            if expected_version == GOAL_SCHEMA_VERSION:
+                goal_tables = {
+                    row["name"]: row["sql"]
+                    for row in connection.execute(
+                        "SELECT name, sql FROM sqlite_schema "
+                        "WHERE type = 'table' AND name IN "
+                        "('goals_current', 'goals_history')"
+                    )
+                }
+                for name, expected_sql in GOAL_TABLE_DEFINITIONS.items():
+                    sql = goal_tables.get(name)
+                    if (
+                        sql is None
+                        or _normalize_schema_sql(sql)
+                        != _normalize_schema_sql(expected_sql)
+                    ):
+                        raise RuntimeError("SQLite schema is incompatible.")
 
             versions = [
                 row["version"]

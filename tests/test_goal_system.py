@@ -17,12 +17,13 @@ from src.goals import (
     GoalPriority,
     GoalRevision,
     GoalSnapshot,
+    GoalSourceKind,
     GoalState,
     ProgressVerification,
 )
 
 
-NOW = "2026-08-02T10:00:00+00:00"
+NOW = "2026-08-02T10:00:00Z"
 
 
 def candidate(**changes):
@@ -43,11 +44,15 @@ def snapshot(index=1, **changes):
         "title": f"Goal {index}",
         "success_condition": "Explicitly accepted result",
         "owner": GoalOwner.USER,
+        "source_kind": GoalSourceKind.VALIDATED_USER,
+        "source_reference": "conversation:1",
         "approval_reference": "conversation:1",
-        "created_at": "2026-08-01T10:00:00+00:00",
-        "updated_at": f"2026-08-02T10:{index % 60:02d}:00+00:00",
+        "created_at": "2026-08-01T10:00:00Z",
+        "updated_at": f"2026-08-02T10:{index % 60:02d}:00Z",
     }
     values.update(changes)
+    if values.get("version", 1) > 1 and "revision_reason" not in changes:
+        values["revision_reason"] = "Approved revision"
     return GoalSnapshot(**values)
 
 
@@ -81,6 +86,26 @@ class GoalModelTests(unittest.TestCase):
             snapshot(progress_percent=0)
         with self.assertRaisesRegex(ValueError, "Unknown progress"):
             snapshot(progress_summary="No progress")
+
+    def test_timestamps_require_canonical_utc_z_format(self):
+        for invalid in (
+            "2026-08-02T10:00:00+00:00",
+            "2026-08-02T14:00:00+04:00",
+            "2026-08-02T10:00:00",
+            "not-a-time",
+        ):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(ValueError, "ending in Z"):
+                    snapshot(updated_at=invalid)
+        self.assertEqual(snapshot(updated_at=NOW).updated_at, NOW)
+
+    def test_snapshot_requires_source_and_revision_metadata(self):
+        with self.assertRaises(ValueError):
+            snapshot(source_kind="validated_user")
+        with self.assertRaisesRegex(ValueError, "revision reason"):
+            snapshot(version=2, revision_reason=None)
+        with self.assertRaisesRegex(ValueError, "Initial goal"):
+            snapshot(version=1, revision_reason="not allowed")
 
     def test_revision_contains_recoverable_immutable_snapshot(self):
         old = snapshot(version=2, state=GoalState.PAUSED)
@@ -119,6 +144,39 @@ class GoalPolicyTests(unittest.TestCase):
         )
         self.assertEqual(approved.owner, GoalOwner.USER)
 
+    def test_approved_system_and_experiment_sources_are_controlled(self):
+        system = self.policy.authorize_creation(
+            candidate(
+                owner=GoalOwner.NEL,
+                outcome_primarily_user=False,
+                source_kind="approved_system",
+            ),
+            explicit_user_approval=True,
+            approval_reference="approval:system",
+        )
+        self.assertEqual(system.owner, GoalOwner.NEL)
+
+        experiment = self.policy.authorize_creation(
+            candidate(source_kind="approved_experiment"),
+            explicit_user_approval=True,
+            approval_reference="approval:experiment",
+            controlled_experiment=True,
+        )
+        self.assertEqual(experiment.source_kind, "approved_experiment")
+
+        with self.assertRaisesRegex(GoalPolicyError, "controlled test"):
+            self.policy.authorize_creation(
+                candidate(source_kind="approved_experiment"),
+                explicit_user_approval=True,
+                approval_reference="approval:experiment",
+            )
+        with self.assertRaisesRegex(GoalPolicyError, "Nel-owned"):
+            self.policy.authorize_creation(
+                candidate(source_kind="approved_system"),
+                explicit_user_approval=True,
+                approval_reference="approval:system",
+            )
+
     def test_primarily_user_outcome_is_normalized_to_user_owner(self):
         approved = self.policy.authorize_creation(
             candidate(owner=GoalOwner.SHARED, outcome_primarily_user=True),
@@ -156,7 +214,7 @@ class GoalPolicyTests(unittest.TestCase):
                 )
 
     def test_invalid_and_terminal_state_transitions_are_rejected(self):
-        with self.assertRaisesRegex(GoalPolicyError, "not allowed"):
+        with self.assertRaisesRegex(GoalPolicyError, "terminal"):
             self.policy.validate_transition(
                 snapshot(state=GoalState.COMPLETED),
                 GoalState.ACTIVE,
@@ -171,6 +229,70 @@ class GoalPolicyTests(unittest.TestCase):
                 source_kind="validated_user",
                 explicit_user_approval=True,
                 approval_reference="conversation:3",
+            )
+
+    def test_ordinary_progress_updates_reject_terminal_goals(self):
+        for state in (GoalState.COMPLETED, GoalState.CANCELLED):
+            with self.subTest(state=state):
+                with self.assertRaisesRegex(GoalPolicyError, "terminal"):
+                    self.policy.validate_progress(
+                        snapshot(state=state),
+                        ProgressVerification.USER_REPORTED,
+                        summary="Reported",
+                        source_kind="validated_user",
+                        explicit_user_approval=True,
+                        approval_reference="conversation:terminal",
+                        owner_confirmation=True,
+                    )
+
+    def test_dedicated_reopen_and_restore_validation(self):
+        self.policy.validate_reopen(
+            snapshot(state=GoalState.COMPLETED, version=2),
+            source_kind="validated_user",
+            explicit_user_approval=True,
+            approval_reference="conversation:reopen",
+            revision_reason="Success condition needs another iteration",
+            expected_version=2,
+        )
+        self.policy.validate_restore(
+            snapshot(state=GoalState.CANCELLED, version=3),
+            source_kind="validated_user",
+            explicit_user_approval=True,
+            approval_reference="conversation:restore",
+            revision_reason="User restored the objective",
+            expected_version=3,
+        )
+
+    def test_reopen_restore_require_reason_source_approval_and_version(self):
+        current = snapshot(state=GoalState.COMPLETED, version=2)
+        base = {
+            "source_kind": "validated_user",
+            "explicit_user_approval": True,
+            "approval_reference": "conversation:reopen",
+            "revision_reason": "Reopened by user",
+            "expected_version": 2,
+        }
+        invalid_cases = (
+            {"source_kind": "approved_system"},
+            {"explicit_user_approval": False},
+            {"approval_reference": ""},
+            {"revision_reason": ""},
+            {"expected_version": 1},
+        )
+        for change in invalid_cases:
+            with self.subTest(change=change):
+                arguments = base | change
+                with self.assertRaises(GoalPolicyError):
+                    self.policy.validate_reopen(current, **arguments)
+
+        with self.assertRaisesRegex(GoalPolicyError, "not eligible"):
+            self.policy.validate_restore(
+                current,
+                source_kind="validated_user",
+                explicit_user_approval=True,
+                approval_reference="conversation:restore",
+                revision_reason="Wrong terminal state",
+                expected_version=2,
             )
 
     def test_completion_requires_success_condition_acceptance(self):
@@ -284,12 +406,12 @@ class GoalContextTests(unittest.TestCase):
             snapshot(
                 1,
                 state=GoalState.CANCELLED,
-                updated_at="2026-08-02T09:00:00+00:00",
+                updated_at="2026-08-02T09:00:00Z",
             ),
             snapshot(
                 2,
                 state=GoalState.COMPLETED,
-                updated_at="2026-08-02T11:00:00+00:00",
+                updated_at="2026-08-02T11:00:00Z",
             ),
         ]
         payload = json.loads(self.serializer.serialize(goals))

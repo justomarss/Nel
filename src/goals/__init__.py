@@ -10,6 +10,7 @@ from src.goals.models import (
     GoalPriority,
     GoalRevision,
     GoalSnapshot,
+    GoalSourceKind,
     GoalState,
     ProgressVerification,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "GoalPriority",
     "GoalRevision",
     "GoalSnapshot",
+    "GoalSourceKind",
     "GoalState",
     "MAX_CURRENT_GOALS",
     "MAX_SERIALIZED_CHARACTERS",

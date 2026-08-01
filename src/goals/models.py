@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 
 
@@ -28,6 +28,12 @@ class GoalPriority(str, Enum):
     HIGH = "high"
 
 
+class GoalSourceKind(str, Enum):
+    VALIDATED_USER = "validated_user"
+    APPROVED_SYSTEM = "approved_system"
+    APPROVED_EXPERIMENT = "approved_experiment"
+
+
 def _require_text(value, field_name: str) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string.")
@@ -40,10 +46,20 @@ def _validate_optional_text(value, field_name: str) -> None:
 
 def _validate_timestamp(value: str, field_name: str) -> None:
     _require_text(value, field_name)
+    if not value.endswith("Z"):
+        raise ValueError(
+            f"{field_name} must be a canonical UTC timestamp ending in Z."
+        )
     try:
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
     except ValueError:
-        raise ValueError(f"{field_name} must be an ISO-8601 timestamp.") from None
+        raise ValueError(
+            f"{field_name} must be a canonical UTC timestamp ending in Z."
+        ) from None
+    if parsed.utcoffset() != timedelta(0):
+        raise ValueError(
+            f"{field_name} must be a canonical UTC timestamp ending in Z."
+        )
 
 
 def _validate_enum(value, enum_type, field_name: str) -> None:
@@ -108,6 +124,8 @@ class GoalSnapshot:
     title: str
     success_condition: str
     owner: GoalOwner
+    source_kind: GoalSourceKind
+    source_reference: str
     approval_reference: str
     created_at: str
     updated_at: str
@@ -118,12 +136,15 @@ class GoalSnapshot:
     progress_verification: ProgressVerification = ProgressVerification.UNKNOWN
     progress_summary: str | None = None
     progress_percent: int | None = None
+    revision_reason: str | None = None
     version: int = 1
 
     def __post_init__(self):
         _require_text(self.goal_id, "goal_id")
         _require_text(self.title, "title")
         _require_text(self.success_condition, "success_condition")
+        _validate_enum(self.source_kind, GoalSourceKind, "source_kind")
+        _require_text(self.source_reference, "source_reference")
         _require_text(self.approval_reference, "approval_reference")
         _validate_enum(self.owner, GoalOwner, "owner")
         _validate_enum(self.state, GoalState, "state")
@@ -137,6 +158,16 @@ class GoalSnapshot:
             raise ValueError("version must be a positive integer.")
         if self.version < 1:
             raise ValueError("version must be a positive integer.")
+        _validate_optional_text(self.revision_reason, "revision_reason")
+        if self.version == 1 and self.revision_reason is not None:
+            raise ValueError("Initial goal version cannot have a revision reason.")
+        if self.version > 1 and self.revision_reason is None:
+            raise ValueError("Revised goal versions require a revision reason.")
+        if (
+            self.source_kind is GoalSourceKind.APPROVED_SYSTEM
+            and self.owner is not GoalOwner.NEL
+        ):
+            raise ValueError("Approved-system goals must be Nel-owned.")
         _validate_progress(
             self.progress_verification,
             self.progress_summary,
