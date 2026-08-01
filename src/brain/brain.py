@@ -1,6 +1,3 @@
-from .providers import OllamaProvider
-
-
 class Brain:
     def __init__(self, provider):
         self.provider = provider

@@ -1,6 +1,6 @@
 from src.brain.brain import Brain
-from src.brain.providers import OllamaProvider
-from src.core.config import MODEL_NAME
+from src.brain.providers import NvidiaNimProvider
+from src.core.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, NVIDIA_MODEL
 
 from src.memory.memory import Memory
 
@@ -19,7 +19,11 @@ from src.brain.intent_classifier import IntentClassifier
 
 class Nel:
     def __init__(self):
-        provider = OllamaProvider(MODEL_NAME)
+        provider = NvidiaNimProvider(
+            model=NVIDIA_MODEL,
+            api_key=NVIDIA_API_KEY,
+            base_url=NVIDIA_BASE_URL,
+        )
 
         self.brain = Brain(provider)
         self.memory = Memory()
