@@ -10,24 +10,25 @@ from src.core.clock import Clock
 from src.core.decision_engine import DecisionEngine
 
 from src.events.event_bus import EventBus
+
 from src.services.thought_service import ThoughtService
+from src.services.knowledge_service import KnowledgeService
+
+from src.brain.intent_classifier import IntentClassifier
 
 
 class Nel:
-
     def __init__(self):
-
         provider = OllamaProvider(MODEL_NAME)
 
         self.brain = Brain(provider)
-
         self.memory = Memory()
-
         self.state = StateManager()
-
         self.decision = DecisionEngine()
+        self.intent = IntentClassifier()
 
         self.thought_service = ThoughtService(self.brain)
+        self.knowledge = KnowledgeService(self.brain)
 
         self.events = EventBus()
         self.events.subscribe("clock_tick", self.on_clock_tick)
@@ -35,17 +36,28 @@ class Nel:
         self.clock = Clock(5, self.tick)
         self.clock.start()
 
-    def think(self, prompt: str):
-
+    def think(self, prompt: str) -> str:
         self.state.set(State.THINKING)
 
-        if self.brain.should_remember(prompt):
-            self.memory.remember(prompt)
+        try:
+            intent = self.intent.classify(prompt)
 
-        memories = self.memory.recall()
-        memory_text = "\n".join(memories)
+            if intent == "SEARCH_MEMORY":
+                answer = self.knowledge.answer(prompt)
 
-        final_prompt = f"""
+                if answer:
+                    return answer
+
+            if intent == "REMEMBER":
+                self.knowledge.process(prompt)
+
+            if self.brain.should_remember(prompt):
+                self.memory.remember(prompt)
+
+            memories = self.memory.recall()
+            memory_text = "\n".join(memories)
+
+            final_prompt = f"""
 You are Nel.
 
 Speak only Azerbaijani.
@@ -59,20 +71,18 @@ User:
 Nel:
 """
 
-        response = self.brain.think(final_prompt)
+            return self.brain.think(final_prompt)
 
-        self.state.set(State.IDLE)
+        finally:
+            self.state.set(State.IDLE)
 
-        return response
-
-    def remember(self, text):
+    def remember(self, text: str) -> None:
         self.memory.remember(text)
 
-    def tick(self):
+    def tick(self) -> None:
         self.events.emit("clock_tick")
 
-    def on_clock_tick(self, data):
-
+    def on_clock_tick(self, data=None) -> None:
         if not self.decision.should_think():
             return
 
