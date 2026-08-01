@@ -44,7 +44,9 @@ AI agents must read `08_RULES_FOR_AI.md` before changing the repository.
 - Temporary interface: command-line development shell
 - Temporary composition root: `src/core/nel.py`
 - Tests: `tests/`
-- Private runtime data: `memory/*.json`
+- Authoritative private runtime data: `memory/nel.sqlite3`
+- Historical private JSON snapshots: `memory/*.json`
+- Cutover backups: `backups/sqlite-cutover/`
 
 ## Local Setup
 
@@ -54,6 +56,11 @@ The current Windows development flow is:
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe main.py
 ```
+
+Startup requires an existing, validated schema-version-1 SQLite database at
+`memory/nel.sqlite3`. Runtime startup never creates an empty production
+database. `NEL_DATABASE_PATH` may override the path for isolated development
+or tests, but there is no JSON runtime backend selector.
 
 Required environment variable names are:
 
@@ -65,6 +72,8 @@ Never print their values. Never commit `.env`.
 
 Optional runtime configuration:
 
+- `NEL_DATABASE_PATH`: existing SQLite database path; defaults to
+  `memory/nel.sqlite3`.
 - `RAW_MEMORY_CONTEXT_LIMIT`: non-negative maximum number of newest raw
   memories included in a prompt; defaults to `20`.
 

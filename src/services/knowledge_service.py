@@ -1,12 +1,11 @@
 from src.brain.knowledge_extractor import KnowledgeExtractor
-from src.memory.knowledge import Knowledge
 
 
 class KnowledgeService:
 
-    def __init__(self, brain, repository=None):
+    def __init__(self, brain, repository):
         self.extractor = KnowledgeExtractor(brain)
-        self.knowledge = repository if repository is not None else Knowledge()
+        self.knowledge = repository
 
     def process(self, text):
 

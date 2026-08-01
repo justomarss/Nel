@@ -1,6 +1,5 @@
 from dotenv import load_dotenv
 import os
-from dataclasses import dataclass
 from pathlib import Path
 
 load_dotenv()
@@ -44,39 +43,13 @@ def _bool_env(name: str, default: bool) -> bool:
     )
 
 
-@dataclass(frozen=True)
-class PersistenceConfig:
-    backend: str
-    database_path: Path | None
-
-
-def load_persistence_config(environ=None) -> PersistenceConfig:
-    values = os.environ if environ is None else environ
-    backend = values.get("NEL_PERSISTENCE_BACKEND", "json").strip().casefold()
-    if backend not in {"json", "sqlite"}:
-        raise ValueError(
-            "NEL_PERSISTENCE_BACKEND must be json or sqlite."
-        )
-
-    if backend == "json":
-        return PersistenceConfig(backend="json", database_path=None)
-
-    raw_path = values.get("NEL_DATABASE_PATH", "").strip()
-    if not raw_path:
-        raise ValueError(
-            "NEL_DATABASE_PATH is required for SQLite persistence."
-        )
-
-    return PersistenceConfig(
-        backend="sqlite",
-        database_path=Path(raw_path),
-    )
-
-
 NVIDIA_API_KEY = _required_env("NVIDIA_API_KEY")
 NVIDIA_BASE_URL = _required_env("NVIDIA_BASE_URL")
 NVIDIA_MODEL = "meta/llama-3.1-70b-instruct"
 NVIDIA_INTERACTIVE_TIMEOUT_SECONDS = 45.0
+NEL_DATABASE_PATH = Path(
+    os.getenv("NEL_DATABASE_PATH") or "memory/nel.sqlite3"
+)
 ENABLE_BACKGROUND_THOUGHTS = _bool_env(
     "ENABLE_BACKGROUND_THOUGHTS",
     False,

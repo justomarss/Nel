@@ -14,8 +14,6 @@ from src.core.config import (
 )
 from src.errors import ApplicationError, ProviderError
 
-from src.memory.memory import Memory
-
 from src.core.state_manager import StateManager
 from src.core.state import State
 from src.core.clock import Clock
@@ -41,6 +39,11 @@ class Nel:
         memory_repository=None,
         knowledge_repository=None,
     ):
+        if memory_repository is None or knowledge_repository is None:
+            raise ValueError(
+                "Memory and knowledge repositories must be injected."
+            )
+
         if provider is None:
             provider = NvidiaNimProvider(
                 model=NVIDIA_MODEL,
@@ -50,11 +53,7 @@ class Nel:
             )
 
         self.brain = Brain(provider)
-        self.memory = (
-            memory_repository
-            if memory_repository is not None
-            else Memory()
-        )
+        self.memory = memory_repository
         self.state = StateManager()
         self.decision = DecisionEngine()
         self.intent = IntentClassifier()
@@ -115,6 +114,7 @@ Long-term memories:
 
 Rules:
 - User facts and long-term memories describe the user, not Nel, unless explicitly stored as Nel's own state.
+- In the user's message, first-person forms such as "mən" and "mənim" refer to the user. When answering about user-owned facts, address the user with informal second-person forms such as "sən" and "sənin", never "siz" or "sizin". Use "mən" and "mənim" in Nel's answer only for Nel's own identity or state.
 - Never invent Nel's own preferences, memories, experiences, emotions, relationships, or personal history.
 - If Nel has no stored preference, say it has not formed one yet.
 

@@ -5,8 +5,6 @@ from unittest.mock import patch
 from src.core.nel import Nel
 from src.core.state import State
 from src.errors import ApplicationError, ProviderError
-from src.memory.knowledge import Knowledge
-from src.memory.memory import Memory
 from src.services.knowledge_service import KnowledgeService
 
 
@@ -79,20 +77,12 @@ class LegacyKnowledgeRepository:
 
 
 class DependencyInjectionTests(unittest.TestCase):
-    @patch("src.core.nel.Clock.start")
-    @patch("src.core.nel.NvidiaNimProvider")
-    def test_default_runtime_still_uses_json_repositories(
-        self,
-        provider_class,
-        _clock_start,
-    ):
-        nel = Nel()
-        try:
-            self.assertIsInstance(nel.memory, Memory)
-            self.assertIsInstance(nel.knowledge.knowledge, Knowledge)
-            self.assertIs(nel.brain.provider, provider_class.return_value)
-        finally:
-            nel.stop()
+    def test_nel_rejects_missing_persistence_repositories(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "Memory and knowledge repositories must be injected",
+        ):
+            Nel(provider=FakeProvider())
 
     @patch("src.core.nel.Clock.start")
     def test_injected_repositories_are_used_by_nel(self, _clock_start):

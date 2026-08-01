@@ -582,3 +582,37 @@ autonomous goals, external actions, self-modification, consciousness modeling,
 and complex preference learning remain deferred.
 
 Status: Accepted.
+
+## ADR-017: SQLite Runtime Cutover and Perspective Ownership
+
+Context: The verified JSON-to-SQLite cutover produced an integrity-checked
+schema-version-1 database and backup. The live database has since received a
+post-cutover write, so historical JSON is no longer current and runtime
+fallback would risk split authority. Conversation also demonstrated a generic
+ownership error in which user first-person language was rendered as Nel
+first-person language in the answer.
+
+Options: retain a JSON/SQLite selector; dual-write both stores; make SQLite
+the sole runtime authority while retaining JSON only as immutable history.
+For perspective, add topic-specific response rules or define generic
+speaker-ownership rules.
+
+Decision: SQLite is the sole active Memory and Knowledge backend. Runtime
+defaults to `memory/nel.sqlite3`, may accept an explicit database path for
+isolated operation, and must open an existing validated database without
+creating one. The temporary JSON backend selector is removed. Historical JSON
+files remain migration and cutover evidence but receive no runtime writes.
+
+Conversation context must distinguish speaker ownership generically. In user
+input, Azerbaijani first-person forms refer to the user. Answers about
+user-owned facts address the user in informal second person. Nel first-person
+forms are reserved for Nel-owned identity or state. No topic-specific game,
+anime, hobby, or media response logic is permitted.
+
+Consequences: JSON rollback is invalid after the first SQLite-only write.
+Recovery must use the live SQLite database or a verified SQLite backup. A
+missing, corrupt, uninitialized, or incompatible production database causes a
+redacted startup failure. Provider behavior, identity separation, graceful
+provider failures, and shutdown behavior remain unchanged.
+
+Status: Accepted.

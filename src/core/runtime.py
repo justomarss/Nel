@@ -1,6 +1,6 @@
 import sqlite3
 
-from src.core.config import load_persistence_config
+from src.core.config import NEL_DATABASE_PATH
 from src.core.nel import Nel
 from src.errors import PersistenceStartupError
 from src.persistence.repositories import SQLiteKnowledge, SQLiteMemory
@@ -10,22 +10,16 @@ from src.persistence.sqlite import SQLiteDatabase
 SQLITE_STARTUP_ERROR = "SQLite persistence is unavailable or invalid."
 
 
-def create_runtime_nel(*, nel_factory=Nel, provider=None, environ=None):
-    try:
-        settings = load_persistence_config(environ)
-    except (AttributeError, TypeError, ValueError):
-        raise PersistenceStartupError(
-            "Persistence configuration is invalid."
-        ) from None
-
-    if settings.backend == "json":
-        if provider is None:
-            return nel_factory()
-        return nel_factory(provider=provider)
-
+def create_runtime_nel(
+    *,
+    nel_factory=Nel,
+    provider=None,
+    database_path=None,
+):
+    target_path = NEL_DATABASE_PATH if database_path is None else database_path
     try:
         database = SQLiteDatabase(
-            settings.database_path,
+            target_path,
             require_existing=True,
         )
         database.validate_existing()

@@ -1,5 +1,4 @@
 import json
-import os
 import sqlite3
 import tempfile
 import unittest
@@ -9,8 +8,6 @@ from unittest.mock import patch
 import main
 from src.core.runtime import create_runtime_nel
 from src.errors import ApplicationError, PersistenceStartupError, ProviderError
-from src.memory.knowledge import Knowledge
-from src.memory.memory import Memory
 from src.persistence.repositories import SQLiteKnowledge, SQLiteMemory
 from src.persistence.sqlite import SQLiteDatabase
 
@@ -35,31 +32,18 @@ class RuntimeCompositionTests(unittest.TestCase):
         return path, database
 
     @patch("src.core.nel.Clock.start")
-    def test_default_startup_still_uses_json(self, _clock_start):
-        nel = create_runtime_nel(provider=FakeProvider(), environ={})
-        try:
-            self.assertIsInstance(nel.memory, Memory)
-            self.assertIsInstance(nel.knowledge.knowledge, Knowledge)
-        finally:
-            nel.stop()
-
-    @patch("src.core.nel.Clock.start")
-    def test_valid_sqlite_startup_uses_one_shared_database(self, _clock_start):
+    def test_default_runtime_uses_sqlite_only(self, _clock_start):
         with tempfile.TemporaryDirectory() as directory:
             path, _database = self._database(directory)
-            nel = create_runtime_nel(
-                provider=FakeProvider(),
-                environ={
-                    "NEL_PERSISTENCE_BACKEND": "sqlite",
-                    "NEL_DATABASE_PATH": str(path),
-                },
-            )
+            with patch("src.core.runtime.NEL_DATABASE_PATH", path):
+                nel = create_runtime_nel(provider=FakeProvider())
             try:
                 memory = nel.memory
                 knowledge = nel.knowledge.knowledge
                 self.assertIsInstance(memory, SQLiteMemory)
                 self.assertIsInstance(knowledge, SQLiteKnowledge)
                 self.assertIs(memory.database, knowledge.database)
+                self.assertEqual(memory.database.path, path)
                 self.assertTrue(memory.database.require_existing)
             finally:
                 nel.stop()
@@ -70,26 +54,11 @@ class RuntimeCompositionTests(unittest.TestCase):
             with self.assertRaises(PersistenceStartupError) as raised:
                 create_runtime_nel(
                     provider=FakeProvider(),
-                    environ={
-                        "NEL_PERSISTENCE_BACKEND": "sqlite",
-                        "NEL_DATABASE_PATH": str(path),
-                    },
+                    database_path=path,
                 )
 
             self.assertFalse(path.exists())
             self.assertNotIn(str(path), str(raised.exception))
-
-    def test_sqlite_backend_requires_database_path(self):
-        with self.assertRaises(PersistenceStartupError) as raised:
-            create_runtime_nel(
-                provider=FakeProvider(),
-                environ={"NEL_PERSISTENCE_BACKEND": "sqlite"},
-            )
-
-        self.assertEqual(
-            str(raised.exception),
-            "Persistence configuration is invalid.",
-        )
 
     def test_corrupt_database_fails_safely(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -99,10 +68,7 @@ class RuntimeCompositionTests(unittest.TestCase):
             with self.assertRaises(PersistenceStartupError):
                 create_runtime_nel(
                     provider=FakeProvider(),
-                    environ={
-                        "NEL_PERSISTENCE_BACKEND": "sqlite",
-                        "NEL_DATABASE_PATH": str(path),
-                    },
+                    database_path=path,
                 )
 
     def test_uninitialized_database_fails_safely(self):
@@ -113,10 +79,7 @@ class RuntimeCompositionTests(unittest.TestCase):
             with self.assertRaises(PersistenceStartupError):
                 create_runtime_nel(
                     provider=FakeProvider(),
-                    environ={
-                        "NEL_PERSISTENCE_BACKEND": "sqlite",
-                        "NEL_DATABASE_PATH": str(path),
-                    },
+                    database_path=path,
                 )
 
     def test_incompatible_schema_fails_safely(self):
@@ -132,10 +95,7 @@ class RuntimeCompositionTests(unittest.TestCase):
             with self.assertRaises(PersistenceStartupError):
                 create_runtime_nel(
                     provider=FakeProvider(),
-                    environ={
-                        "NEL_PERSISTENCE_BACKEND": "sqlite",
-                        "NEL_DATABASE_PATH": str(path),
-                    },
+                    database_path=path,
                 )
 
     def test_incompatible_version_one_table_layout_fails_safely(self):
@@ -149,24 +109,17 @@ class RuntimeCompositionTests(unittest.TestCase):
             with self.assertRaises(PersistenceStartupError):
                 create_runtime_nel(
                     provider=FakeProvider(),
-                    environ={
-                        "NEL_PERSISTENCE_BACKEND": "sqlite",
-                        "NEL_DATABASE_PATH": str(path),
-                    },
+                    database_path=path,
                 )
 
     @patch("src.core.nel.Clock.start")
     def test_sqlite_data_survives_nel_reconstruction(self, _clock_start):
         with tempfile.TemporaryDirectory() as directory:
             path, _database = self._database(directory)
-            environ = {
-                "NEL_PERSISTENCE_BACKEND": "sqlite",
-                "NEL_DATABASE_PATH": str(path),
-            }
 
             first = create_runtime_nel(
                 provider=FakeProvider(),
-                environ=environ,
+                database_path=path,
             )
             first.remember("Yaddaş: Ömər")
             first.knowledge.knowledge.set("name", "Ömər")
@@ -174,7 +127,7 @@ class RuntimeCompositionTests(unittest.TestCase):
 
             second = create_runtime_nel(
                 provider=FakeProvider(),
-                environ=environ,
+                database_path=path,
             )
             try:
                 self.assertEqual(second.memory.recall(), ["Yaddaş: Ömər"])
@@ -195,10 +148,7 @@ class RuntimeCompositionTests(unittest.TestCase):
 
             nel = create_runtime_nel(
                 provider=FailingProvider(),
-                environ={
-                    "NEL_PERSISTENCE_BACKEND": "sqlite",
-                    "NEL_DATABASE_PATH": str(path),
-                },
+                database_path=path,
             )
             try:
                 with self.assertRaises(ApplicationError):
@@ -231,28 +181,20 @@ class RuntimeCompositionTests(unittest.TestCase):
             )
             original_memory = long_term.read_bytes()
             original_knowledge = knowledge_json.read_bytes()
-            path, _database = self._database(directory)
+            path, database = self._database(directory)
 
-            previous_directory = Path.cwd()
-            os.chdir(root)
-            try:
-                nel = create_runtime_nel(
-                    provider=FakeProvider(),
-                    environ={
-                        "NEL_PERSISTENCE_BACKEND": "sqlite",
-                        "NEL_DATABASE_PATH": str(path),
-                    },
-                )
-                nel.remember("sqlite only")
-                nel.knowledge.knowledge.set("name", "SQLite")
-                nel.stop()
-            finally:
-                os.chdir(previous_directory)
+            nel = create_runtime_nel(
+                provider=FakeProvider(),
+                database_path=path,
+            )
+            nel.remember("sqlite only")
+            nel.knowledge.knowledge.set("name", "SQLite")
+            nel.stop()
 
             self.assertEqual(long_term.read_bytes(), original_memory)
             self.assertEqual(knowledge_json.read_bytes(), original_knowledge)
-            self.assertEqual(SQLiteMemory(_database).recall(), ["sqlite only"])
-            self.assertEqual(SQLiteKnowledge(_database).get("name"), "SQLite")
+            self.assertEqual(SQLiteMemory(database).recall(), ["sqlite only"])
+            self.assertEqual(SQLiteKnowledge(database).get("name"), "SQLite")
 
     def test_cli_reports_startup_failure_without_constructed_shutdown(self):
         error = PersistenceStartupError(

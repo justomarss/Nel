@@ -132,14 +132,15 @@ class RuntimeLifecycleTests(unittest.TestCase):
             def stop(self):
                 self.stopped += 1
 
+        fake_nel = FakeNel()
         with (
-            patch.object(main, "Nel", FakeNel),
+            patch.object(main, "create_runtime_nel", return_value=fake_nel),
             patch("builtins.input", side_effect=["hello", "exit"]),
             patch("builtins.print") as output,
         ):
             main.run()
 
-        self.assertEqual(FakeNel.instance.stopped, 1)
+        self.assertEqual(fake_nel.stopped, 1)
         output.assert_any_call("Nel: provider unavailable")
 
     def test_cli_stops_when_input_is_interrupted(self):
@@ -153,14 +154,15 @@ class RuntimeLifecycleTests(unittest.TestCase):
             def stop(self):
                 self.stopped += 1
 
+        fake_nel = FakeNel()
         with (
-            patch.object(main, "Nel", FakeNel),
+            patch.object(main, "create_runtime_nel", return_value=fake_nel),
             patch("builtins.input", side_effect=KeyboardInterrupt),
         ):
             with self.assertRaises(KeyboardInterrupt):
                 main.run()
 
-        self.assertEqual(FakeNel.instance.stopped, 1)
+        self.assertEqual(fake_nel.stopped, 1)
 
     def test_foreground_provider_failure_restores_idle_state(self):
         class StateRecorder:

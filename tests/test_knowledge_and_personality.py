@@ -5,7 +5,8 @@ from pathlib import Path
 
 from src.brain.intent_classifier import IntentClassifier
 from src.core.nel import Nel
-from src.memory.knowledge import Knowledge
+from src.persistence.repositories import SQLiteKnowledge
+from src.persistence.sqlite import SQLiteDatabase
 from src.services.knowledge_service import KnowledgeService
 
 
@@ -39,19 +40,21 @@ class QueueProvider:
 
 
 class KnowledgeAndPersonalityTests(unittest.TestCase):
-    def create_service(self, path, *responses):
+    def create_service(self, directory, *responses):
         provider = QueueProvider(*responses)
         brain = type("Brain", (), {"provider": provider})()
-        service = KnowledgeService(brain)
-        service.knowledge.path = path
+        database = SQLiteDatabase(Path(directory) / "knowledge.sqlite3")
+        database.initialize("2026-08-02T00:00:00Z")
+        service = KnowledgeService(
+            brain,
+            repository=SQLiteKnowledge(database),
+        )
         return service, provider
 
     def test_newer_favorite_anime_overwrites_older_value(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "knowledge.json"
-            path.write_text("{}", encoding="utf-8")
             service, _ = self.create_service(
-                path,
+                directory,
                 fact_response("Favorite Anime", "Bleach"),
                 fact_response("favorite-anime", "AoT"),
             )
@@ -59,57 +62,49 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
             service.process("Mənim ən sevdiyim anime Bleach-dir.")
             service.process("Mənim ən sevdiyim anime AoT-dir.")
 
-            stored = json.loads(path.read_text(encoding="utf-8"))
+            stored = service.facts()
             self.assertEqual(stored, {"favorite_anime": "AoT"})
 
     def test_favorite_game_preserves_literal_value(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "knowledge.json"
-            path.write_text("{}", encoding="utf-8")
             service, _ = self.create_service(
-                path,
+                directory,
                 fact_response("Favorite Game", "MK11"),
             )
 
             service.process("Mənim ən sevdiyim oyun MK11-dir.")
 
-            stored = json.loads(path.read_text(encoding="utf-8"))
+            stored = service.facts()
             self.assertEqual(stored, {"favorite_game": "MK11"})
 
     def test_user_name_preserves_unicode_literal(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "knowledge.json"
-            path.write_text("{}", encoding="utf-8")
             service, _ = self.create_service(
-                path,
+                directory,
                 fact_response("Name", "Ömər"),
             )
 
             service.process("Mənim adım Ömərdir.")
 
-            stored = json.loads(path.read_text(encoding="utf-8"))
+            stored = service.facts()
             self.assertEqual(stored, {"name": "Ömər"})
 
     def test_sentence_without_durable_fact_stores_nothing(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "knowledge.json"
-            path.write_text("{}", encoding="utf-8")
             service, _ = self.create_service(
-                path,
+                directory,
                 '{"facts": []}',
             )
 
             service.process("Bu gün hava haqqında düşünürəm.")
 
-            stored = json.loads(path.read_text(encoding="utf-8"))
+            stored = service.facts()
             self.assertEqual(stored, {})
 
     def test_malformed_json_retries_once_then_logs(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "knowledge.json"
-            path.write_text("{}", encoding="utf-8")
             service, provider = self.create_service(
-                path,
+                directory,
                 "not JSON",
                 '{"facts": [}',
             )
@@ -120,7 +115,7 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
             ) as logs:
                 service.process("Mənim adım Ömərdir.")
 
-            stored = json.loads(path.read_text(encoding="utf-8"))
+            stored = service.facts()
             self.assertEqual(stored, {})
             self.assertEqual(provider.calls, 2)
             self.assertIn("No facts stored", logs.output[0])
@@ -170,6 +165,77 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
         self.assertEqual(response, "Nel has not formed an anime preference yet.")
         self.assertNotIn("prefers Bleach", response)
         self.assertIn('"favorite_anime": "AoT"', nel.brain.prompt)
+
+    def test_user_first_person_question_becomes_second_person_answer(self):
+        class Brain:
+            prompt = None
+
+            def should_remember(self, prompt):
+                return False
+
+            def think(self, prompt):
+                self.prompt = prompt
+                required = (
+                    'first-person forms such as "mən" and "mənim" refer to the user',
+                    'address the user with informal second-person forms such as "sən" and "sənin"',
+                    'Use "mən" and "mənim" in Nel\'s answer only for Nel\'s own identity or state',
+                )
+                if all(rule in prompt for rule in required):
+                    return "Sənin ən sevdiyin oyun MK11-dir."
+                return "Sizin ən sevdiyim oyun MK11-dir."
+
+        nel = Nel.__new__(Nel)
+        nel.state = type("State", (), {"set": lambda self, state: None})()
+        nel.intent = IntentClassifier()
+        nel.memory = type("Memory", (), {"recall": lambda self, limit=None: []})()
+        nel.knowledge = type(
+            "Knowledge",
+            (),
+            {
+                "answer": lambda self, text: None,
+                "facts": lambda self: {"favorite_game": "MK11"},
+            },
+        )()
+        nel.brain = Brain()
+        nel.raw_memory_context_limit = 20
+
+        response = nel.think("Mənim ən sevdiyim oyun hansıdır?")
+
+        self.assertEqual(response, "Sənin ən sevdiyin oyun MK11-dir.")
+        rules = nel.brain.prompt.split("Rules:", 1)[1].split("User:", 1)[0]
+        self.assertNotIn("anime", rules.casefold())
+        self.assertNotIn("game", rules.casefold())
+        self.assertNotIn("oyun", rules.casefold())
+
+    def test_nel_identity_remains_first_person_in_answer(self):
+        class Brain:
+            def should_remember(self, prompt):
+                return False
+
+            def think(self, prompt):
+                if (
+                    'Use "mən" and "mənim" in Nel\'s answer only for '
+                    "Nel's own identity or state"
+                ) in prompt:
+                    return "Mən Neləm."
+                return "Sən Nel'sən."
+
+        nel = Nel.__new__(Nel)
+        nel.state = type("State", (), {"set": lambda self, state: None})()
+        nel.intent = IntentClassifier()
+        nel.memory = type("Memory", (), {"recall": lambda self, limit=None: []})()
+        nel.knowledge = type(
+            "Knowledge",
+            (),
+            {
+                "answer": lambda self, text: None,
+                "facts": lambda self: {},
+            },
+        )()
+        nel.brain = Brain()
+        nel.raw_memory_context_limit = 20
+
+        self.assertEqual(nel.think("Sən kimsən?"), "Mən Neləm.")
 
 
 if __name__ == "__main__":
