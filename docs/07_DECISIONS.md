@@ -712,3 +712,263 @@ rewards, emotions, relationship modeling, consciousness, and
 self-modification remain deferred.
 
 Status: Accepted.
+
+## ADR-019: Minimal Goal Persistence Schema
+
+Context: ADR-018 requires durable current goals, recoverable revisions,
+expected-version updates, explicit approval, and strict namespace separation.
+Schema version 2 contains memory, user-fact, and Nel-identity storage but no
+goal persistence. Goal persistence must remain small enough to reverse before
+runtime integration and must not introduce planning or action infrastructure.
+
+Options: store goals in JSON; add a single mutable SQLite table; add an event
+log and reconstruct current goals; or add direct current storage plus a
+history table. JSON lacks transactional integration, a mutable-only table
+loses revisions, and event reconstruction adds unnecessary complexity.
+
+Decision: schema version 3 adds exactly two `STRICT` tables,
+`goals_current` and `goals_history`, plus one secondary current-state index.
+`goals_current` stores the latest accepted record directly.
+`goals_history` stores every superseded record. Goal tables have no foreign
+keys to memory events, user facts, Nel identity, or thoughts.
+
+The accepted schema is:
+
+```sql
+CREATE TABLE goals_current (
+    goal_id TEXT PRIMARY KEY COLLATE BINARY,
+    title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+    description TEXT CHECK (
+        description IS NULL OR length(trim(description)) > 0
+    ),
+    success_condition TEXT NOT NULL CHECK (
+        length(trim(success_condition)) > 0
+    ),
+    owner TEXT NOT NULL CHECK (
+        owner IN ('user', 'nel', 'shared')
+    ),
+    state TEXT NOT NULL CHECK (
+        state IN ('active', 'paused', 'completed', 'cancelled')
+    ),
+    priority TEXT NOT NULL CHECK (
+        priority IN ('low', 'normal', 'high')
+    ),
+    deadline TEXT CHECK (
+        deadline IS NULL OR (
+            length(deadline) >= 20
+            AND substr(deadline, 11, 1) = 'T'
+            AND substr(deadline, -1, 1) = 'Z'
+        )
+    ),
+    progress_summary TEXT CHECK (
+        progress_summary IS NULL OR length(trim(progress_summary)) > 0
+    ),
+    progress_percentage INTEGER CHECK (
+        progress_percentage IS NULL
+        OR progress_percentage BETWEEN 0 AND 100
+    ),
+    progress_verification TEXT NOT NULL CHECK (
+        progress_verification IN (
+            'unknown', 'user_reported', 'verified'
+        )
+    ),
+    source_kind TEXT NOT NULL CHECK (
+        source_kind IN (
+            'validated_user', 'approved_system', 'approved_experiment'
+        )
+    ),
+    source_reference TEXT NOT NULL CHECK (
+        length(trim(source_reference)) > 0
+    ),
+    approval_reference TEXT NOT NULL CHECK (
+        length(trim(approval_reference)) > 0
+    ),
+    revision_reason TEXT CHECK (
+        revision_reason IS NULL OR length(trim(revision_reason)) > 0
+    ),
+    version INTEGER NOT NULL CHECK (version > 0),
+    created_at TEXT NOT NULL CHECK (
+        length(created_at) >= 20
+        AND substr(created_at, 11, 1) = 'T'
+        AND substr(created_at, -1, 1) = 'Z'
+    ),
+    updated_at TEXT NOT NULL CHECK (
+        length(updated_at) >= 20
+        AND substr(updated_at, 11, 1) = 'T'
+        AND substr(updated_at, -1, 1) = 'Z'
+    ),
+    CHECK (
+        (progress_verification = 'unknown'
+         AND progress_summary IS NULL
+         AND progress_percentage IS NULL)
+        OR
+        (progress_verification IN ('user_reported', 'verified')
+         AND progress_summary IS NOT NULL)
+    ),
+    CHECK (
+        source_kind != 'approved_system' OR owner = 'nel'
+    ),
+    CHECK (
+        (version = 1 AND revision_reason IS NULL)
+        OR (version > 1 AND revision_reason IS NOT NULL)
+    )
+) STRICT;
+
+CREATE TABLE goals_history (
+    goal_id TEXT NOT NULL COLLATE BINARY,
+    title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+    description TEXT CHECK (
+        description IS NULL OR length(trim(description)) > 0
+    ),
+    success_condition TEXT NOT NULL CHECK (
+        length(trim(success_condition)) > 0
+    ),
+    owner TEXT NOT NULL CHECK (
+        owner IN ('user', 'nel', 'shared')
+    ),
+    state TEXT NOT NULL CHECK (
+        state IN ('active', 'paused', 'completed', 'cancelled')
+    ),
+    priority TEXT NOT NULL CHECK (
+        priority IN ('low', 'normal', 'high')
+    ),
+    deadline TEXT CHECK (
+        deadline IS NULL OR (
+            length(deadline) >= 20
+            AND substr(deadline, 11, 1) = 'T'
+            AND substr(deadline, -1, 1) = 'Z'
+        )
+    ),
+    progress_summary TEXT CHECK (
+        progress_summary IS NULL OR length(trim(progress_summary)) > 0
+    ),
+    progress_percentage INTEGER CHECK (
+        progress_percentage IS NULL
+        OR progress_percentage BETWEEN 0 AND 100
+    ),
+    progress_verification TEXT NOT NULL CHECK (
+        progress_verification IN (
+            'unknown', 'user_reported', 'verified'
+        )
+    ),
+    source_kind TEXT NOT NULL CHECK (
+        source_kind IN (
+            'validated_user', 'approved_system', 'approved_experiment'
+        )
+    ),
+    source_reference TEXT NOT NULL CHECK (
+        length(trim(source_reference)) > 0
+    ),
+    approval_reference TEXT NOT NULL CHECK (
+        length(trim(approval_reference)) > 0
+    ),
+    revision_reason TEXT CHECK (
+        revision_reason IS NULL OR length(trim(revision_reason)) > 0
+    ),
+    version INTEGER NOT NULL CHECK (version > 0),
+    created_at TEXT NOT NULL CHECK (
+        length(created_at) >= 20
+        AND substr(created_at, 11, 1) = 'T'
+        AND substr(created_at, -1, 1) = 'Z'
+    ),
+    updated_at TEXT NOT NULL CHECK (
+        length(updated_at) >= 20
+        AND substr(updated_at, 11, 1) = 'T'
+        AND substr(updated_at, -1, 1) = 'Z'
+    ),
+    superseded_at TEXT NOT NULL CHECK (
+        length(superseded_at) >= 20
+        AND substr(superseded_at, 11, 1) = 'T'
+        AND substr(superseded_at, -1, 1) = 'Z'
+    ),
+    PRIMARY KEY (goal_id, version),
+    CHECK (
+        (progress_verification = 'unknown'
+         AND progress_summary IS NULL
+         AND progress_percentage IS NULL)
+        OR
+        (progress_verification IN ('user_reported', 'verified')
+         AND progress_summary IS NOT NULL)
+    ),
+    CHECK (
+        source_kind != 'approved_system' OR owner = 'nel'
+    ),
+    CHECK (
+        (version = 1 AND revision_reason IS NULL)
+        OR (version > 1 AND revision_reason IS NOT NULL)
+    )
+) STRICT;
+
+CREATE INDEX goals_current_state_updated_idx
+ON goals_current (state, updated_at DESC, goal_id);
+```
+
+Only `description`, `deadline`, `progress_summary`, `progress_percentage`, and
+version-1 `revision_reason` may be `NULL`. `unknown` progress is not zero
+percent and carries neither summary nor percentage. Reported and verified
+progress require a summary; their percentage remains optional.
+
+Durable source kinds are `validated_user`, `approved_system`, and
+`approved_experiment`. Every source kind still requires explicit Ömər approval
+and a non-empty approval reference. `approved_system` is valid only for an
+explicitly authorized Nel-owned goal. `approved_experiment` is valid only in
+controlled development or isolated tests. Model output, thought output, and
+unvalidated runtime input are prohibited durable sources. `GoalPolicy` and
+`GoalService` enforce approval provenance; the database additionally prevents
+`approved_system` from being stored with a non-Nel owner.
+
+Ordinary updates may transition only non-terminal goals according to
+`GoalPolicy`; they must reject every update to `completed` or `cancelled`
+records. `completed` to `active` is permitted only through a dedicated reopen
+operation. `cancelled` to `active` is permitted only through a dedicated
+restore operation. Both operations require `validated_user` source, explicit
+Ömər approval, an approval reference, a non-empty revision reason, and an
+expected version. They insert the terminal current record into history and
+write a new active current version atomically. No trigger enforces lifecycle
+transitions; `GoalPolicy`, `GoalService`, and dedicated repository operations
+own that validation because SQLite lacks approval context.
+
+Creation and every revision use an explicit `BEGIN IMMEDIATE` transaction.
+For an update, the repository reads the current row, compares it with the
+required expected version, inserts the complete old row into history, and
+updates exactly one current row to `expected_version + 1`. Any mismatch,
+constraint failure, or row-count failure rolls back both writes. Goals are
+cancelled rather than physically deleted.
+
+All human-readable data uses SQLite `TEXT` and Python `str`; values are bound
+as parameters and are not normalized, case-folded, trimmed, or rewritten.
+Timestamps are canonical UTC ISO-8601 text ending in `Z`. Application code
+performs strict calendar parsing before opening the write transaction; schema
+checks enforce only the canonical structural shape. `created_at` never
+changes, `updated_at` marks when a version became current, and
+`superseded_at` marks when it entered history.
+
+Migration from schema version 2 to 3 requires a valid v2 database, successful
+integrity check, and exactly the six approved v2 tables and identity triggers.
+Inside one `BEGIN IMMEDIATE` transaction it refuses pre-existing goal schema,
+creates the two empty goal tables and index, replaces the schema-version row
+with version 3, validates exactly eight approved tables, and confirms existing
+memory, facts, fact history, and identity are unchanged. A valid v3 database
+is an idempotent no-op. Any failure rolls back to v2. Runtime must never
+migrate automatically.
+
+A validated v2 backup is required before migration. A post-migration v3
+backup must be independently restore-verified for schema, integrity, Unicode,
+goal counts, and current/history consistency. Before the first goal write,
+rollback restores the v2 backup and v2-compatible runtime. After the first
+goal write, v2 rollback would lose authoritative goal data and is prohibited;
+recovery must use a validated v3 backup. SQL down-migration is not supported.
+
+Required tests cover v2-to-v3 migration, idempotency, unchanged existing
+namespaces, current/history consistency, expected-version conflicts,
+transaction rollback, reopen and restore boundaries, source-kind rules,
+Unicode preservation, backup and isolated restore, namespace isolation, and
+temporary-data-only operation.
+
+Consequences: Goal persistence remains direct, transactional, auditable, and
+provider-independent. The schema adds no subtasks, reminders, recurrence,
+dependencies, plans, evidence graphs, semantic search, action authority, or
+additional goal tables or triggers. Repository, service, runtime, and backup
+support remain separate implementation stages.
+
+Status: Accepted.
