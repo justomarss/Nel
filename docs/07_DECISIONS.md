@@ -467,3 +467,29 @@ selecting a permanent model requires evidence from a faster reliable model or
 an approved scheduling policy.
 
 Status: Accepted.
+
+## ADR-014: Physical Companion as the Intended Primary Interface
+
+Context: The CLI is already defined as a development shell, but Nel's
+long-term product form was not explicit. A known direction is needed so core
+behavior does not become coupled to the CLI or prematurely optimized for a
+desktop application.
+
+Options: leave the final interface undefined; make a conventional desktop or
+mobile application primary; target a small physical desktop companion while
+keeping Nel Core interface-independent.
+
+Decision: Nel's intended final primary interface is a small physical desktop
+companion, likely in a custom 3D-printed enclosure. Expected future hardware
+includes a screen, microphone, speaker, camera, and either onboard computing
+or a client connection to Nel Core. Physical movement and motors are optional.
+The CLI, future desktop application, mobile connection, and physical device
+must use the same platform-independent Nel Core behavior.
+
+Consequences: This decision does not change roadmap priorities or authorize
+hardware, robotics, camera, audio, UI, or device implementation. The CLI
+remains the current development shell. Hardware abstraction must wait until a
+physical prototype provides concrete constraints, and no interface may become
+a separate authority for Nel's identity or memory.
+
+Status: Accepted.

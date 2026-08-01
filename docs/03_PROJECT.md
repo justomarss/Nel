@@ -13,6 +13,13 @@ Nel should become a reliable long-term digital companion with durable memory,
 a consistent artificial identity, controlled initiative, and the ability to
 reason without automatic agreement or fabricated personal history.
 
+Nel's intended final primary interface is a small physical desktop companion
+device, likely housed in a custom 3D-printed enclosure. The device is expected
+to provide a screen for Nel's face, expressions, animations, and status;
+microphone input; speaker output and sound effects; camera input; and either
+an onboard computer or a client connection to Nel Core. Physical movement and
+motors are optional, not core product requirements.
+
 ## Primary User
 
 Ömər is the sole intended user during the current phase. Multi-user product
@@ -48,12 +55,14 @@ The first stable Nel must:
 - Controlled clock/event-driven reflection
 - Reliability, privacy, testing, and architecture documentation
 - CLI as a temporary development shell
+- Platform-independent Nel Core behavior that can later serve multiple
+  interface clients
 
 ## Explicitly Deferred
 
 - unrestricted web browsing;
 - phone or risky account control;
-- physical robot hardware;
+- implementation of the physical companion device before core reliability;
 - unrestricted self-modification;
 - public multi-user support;
 - plugin marketplace;
@@ -67,6 +76,12 @@ The first stable Nel must:
 - Cloud inference requires explicit configuration.
 - Provider replacement must preserve identity and memory.
 - Interface work follows core behavior reliability.
+- The physical desktop companion is the intended long-term primary interface,
+  but it does not change current roadmap priorities.
+- Nel Core must remain usable by the development CLI and future desktop,
+  mobile, and physical-device clients.
+- Hardware abstractions must not be designed before a physical prototype
+  provides concrete requirements.
 - Reliability and clarity take priority over feature count.
 - No completion dates are promised without evidence.
 

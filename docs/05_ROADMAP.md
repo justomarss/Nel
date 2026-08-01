@@ -10,6 +10,9 @@ Status: Descriptive. Capability-based; no promised dates.
 - Major architecture still requires the approval process.
 - Voice, vision, desktop control, and public-product work remain deferred
   until core behavior is stable.
+- The physical desktop companion is the intended long-term primary interface,
+  but this direction does not move hardware or interface work ahead of core
+  reliability milestones.
 
 ## Milestone 0: Onboarding Baseline
 
@@ -166,14 +169,19 @@ Exit criteria:
 
 Only after Milestone 6:
 
-- desktop/avatar experience;
-- voice;
-- mobile connection;
-- vision;
-- physical movement;
+- physical desktop companion prototype with a screen, microphone, speaker,
+  camera, and either onboard computing or a Nel Core client connection;
+- desktop and mobile clients using the same Nel Core behavior;
+- face, expression, animation, status, voice, sound, and camera interaction;
+- optional physical movement only if the companion prototype demonstrates a
+  useful need;
 - public-product evaluation.
 
 These are not committed roadmap deliverables.
+
+Hardware abstraction, robotics, audio, camera, and interface implementation
+must wait for a concrete physical prototype and must not reshape Nel Core in
+advance of measured requirements.
 
 ## Critical Dependency Chain
 

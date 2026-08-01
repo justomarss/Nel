@@ -15,6 +15,8 @@ technical defaults, not accepted permanent architecture.
    cloud inference.
 8. Reliability and observability precede expanded autonomy.
 9. Architecture serves Nel first; it is not a generic agent framework.
+10. Nel Core behavior remains independent of any single user interface or
+    device form factor.
 
 ## Current Runtime Flow
 
@@ -64,6 +66,31 @@ retrieval, or policy details.
 [Provisional] Introduce explicit lifecycle methods such as start and stop
 before replacing the composition root. This is reversible and addresses
 resource ownership without selecting a final runtime framework.
+
+## Interface Boundary
+
+The root CLI is a development shell, not the product interface. Nel's intended
+final primary interface is a small physical desktop companion with a display,
+microphone, speaker, camera, and either onboard computation or a client link
+to Nel Core. Motors and physical movement are optional.
+
+Nel Core must remain sufficiently platform-independent that the CLI, a future
+desktop application, a mobile connection, and the physical device can use the
+same memory, identity, reasoning, provider, state, and autonomy behavior.
+Interfaces may translate input and output, but they must not become separate
+authorities for Nel's identity or memory.
+
+```text
+Development CLI ----\
+Desktop app ---------+--> Nel Core --> durable state and providers
+Mobile connection ---+
+Physical companion -/
+```
+
+This is a product boundary, not approval to implement device protocols,
+audio, camera, animation, robotics, or UI systems. Do not introduce hardware
+abstraction layers until a physical prototype establishes real interfaces and
+constraints.
 
 ## Provider Boundary
 
@@ -117,10 +144,11 @@ JSON files are prototype persistence only. They do not provide transactions,
 concurrency control, migrations, relational integrity, or recoverable value
 history.
 
-[Provisional] SQLite is the default candidate for the first durable store
-because it is local, transactional, inspectable, and reversible through
-export. Adoption requires a migration proposal, backup plan, validation
-tests, and Ömər's approval.
+ADR-013 accepts SQLite as Nel's authoritative local persistence foundation.
+The approved schema is limited to `schema_version`, `memory_events`,
+`user_facts_current`, and `user_fact_history`. Current facts are stored
+directly; superseded values remain recoverable in history. Additional domain
+tables and retrieval extensions require separate approval.
 
 A vector database must not be added until semantic retrieval is necessary,
 measured, and shown to outperform simpler indexed retrieval.
