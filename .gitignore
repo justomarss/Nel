@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 memory/*.json
 logs/.env
+memory/*.sqlite3
+memory/*.sqlite3-*
+memory/*.cutover.json
+backups/sqlite-cutover/
