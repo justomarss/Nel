@@ -616,3 +616,99 @@ redacted startup failure. Provider behavior, identity separation, graceful
 provider failures, and shutdown behavior remain unchanged.
 
 Status: Accepted.
+
+## ADR-018: Goal System v1
+
+Context: Nel needs to store, track, and review approved long-term outcomes
+without treating wishes, generated text, thoughts, or reminders as durable
+goals. Goal state must remain provider-independent, auditable, and separate
+from user facts, memory, and Nel identity. A goal records an approved desired
+outcome; it does not grant authority to act.
+
+Options: infer and execute goals directly from conversation; allow thoughts
+or model output to create goals; introduce a planning and scheduling system;
+or implement a minimal controlled goal record with explicit ownership,
+validation, revision history, and no autonomous execution.
+
+Decision: Goal v1 is a durable, explicitly validated desired outcome with a
+stable ID, title, optional bounded description, owner, observable success
+condition, lifecycle state, priority, optional deadline, accepted progress,
+version, timestamps, and approval/source reference. A goal is not a task,
+plan, reminder, memory, fact, preference, identity record, or authority to
+act. Vague intentions, user statements, thoughts, and model suggestions remain
+temporary candidates until explicitly validated.
+
+Ownership is `user`, `nel`, or `shared`. A user goal primarily belongs to
+Ömər. A Nel goal is an explicitly owner-authorized system objective, not an
+independent desire. A shared goal is a user-approved collaborative objective;
+it does not imply equal agency, emotion, consent, or independent desire. Nel
+may participate only through separately authorized capabilities. If the
+outcome primarily belongs to Ömər, ownership remains `user` even when Nel
+assists.
+
+Durable lifecycle states are `active`, `paused`, `completed`, and `cancelled`.
+Candidates are not a durable state. Reopening a completed or cancelled goal
+requires explicit approval, creates a new version, and preserves terminal
+history. Priority is `low`, `normal`, or `high`, defaults to `normal`, and
+affects review ordering only. Deadlines are optional, preserve original input
+and normalized date/time semantics, and never trigger automatic completion,
+cancellation, reminders, or execution.
+
+Progress verification state is `unknown`, `user_reported`, or `verified`.
+`unknown` is not zero percent; it means no accepted progress evidence exists.
+User-reported progress must be described as reported rather than verified.
+Verified progress requires explicit owner confirmation or deterministic
+evidence. Model output cannot promote progress from `unknown` to
+`user_reported` or `verified`. Optional percentages do not replace evidence,
+and completion always requires explicit acceptance that the success condition
+has been satisfied.
+
+`GoalService` is the sole normal write boundary. `GoalPolicy` validates
+ownership, actor authority, lifecycle transitions, deadlines, progress
+evidence, and expected versions before `GoalService` may write through a
+repository. Every accepted update requires an expected-version check, stores
+the new current record directly, and preserves the previous version in
+recoverable history. Current goals and goal history remain separate from user
+facts and identity. Thoughts and model output may create only temporary goal
+candidates; they cannot create, update, pause, complete, cancel, or execute a
+durable goal. In v1, durable changes require an explicitly validated user
+instruction.
+
+Goal context supplied to a provider is read-only, structured, and
+provider-independent. It must never include all goals. The default maximum is
+10 relevant `active` or `paused` goals, 5 recent `completed` or `cancelled`
+goals, and 4,096 serialized characters total. Selection and truncation are
+deterministic: active goals precede paused goals, high priority precedes normal
+and low priority, then earlier deadlines, newer updates, and stable goal ID;
+terminal goals are ordered by most recent update and stable goal ID. Items are
+removed from the end of that order until the character budget is satisfied.
+
+Exact duplicates and invalid state transitions are rejected deterministically.
+Possible semantic conflicts are review candidates only: existing goals remain
+unchanged until Ömər explicitly chooses to reprioritize, pause, revise, or
+cancel. Staleness is a derived review condition, not a lifecycle state. A
+missed deadline or an approved inactivity threshold may mark a goal for
+review, but cannot mutate it automatically.
+
+The smallest approved architecture consists of immutable `GoalCandidate`,
+`GoalSnapshot`, and `GoalRevision` types; a deny-by-default `GoalPolicy` for
+temporary candidates; `GoalService` as the only write boundary; a
+transactional `GoalRepository`; and a bounded read-only goal-context builder.
+The storage schema requires a separately approved migration and is not defined
+by this ADR.
+
+Consequences: Goal operations remain local and deterministic even if a model
+or provider is unavailable. Nel cannot claim unverified progress, convert a
+thought into a goal, or treat a goal as permission for external action.
+Implementation must test transaction rollback, expected-version conflicts,
+history recovery, namespace isolation, bounded context, Unicode preservation,
+and absence of production-data writes.
+
+Autonomous goal creation, execution, planning, subtasks, dependency graphs,
+reminders, recurrence, notification scheduling, automatic progress claims,
+automatic conflict resolution, semantic retrieval, external actions,
+multi-user delegation, sensor-derived progress, device-specific behavior,
+rewards, emotions, relationship modeling, consciousness, and
+self-modification remain deferred.
+
+Status: Accepted.
