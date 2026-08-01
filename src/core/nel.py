@@ -1,6 +1,5 @@
 import json
 import logging
-import threading
 
 from src.brain.brain import Brain
 from src.brain.providers import NvidiaNimProvider
@@ -23,6 +22,7 @@ from src.events.event_bus import EventBus
 
 from src.services.thought_service import ThoughtService
 from src.services.knowledge_service import KnowledgeService
+from src.thoughts import ThoughtCoordinator, ThoughtWorker
 
 from src.brain.intent_classifier import IntentClassifier
 
@@ -63,14 +63,21 @@ class Nel:
         self.decision = DecisionEngine()
         self.intent = IntentClassifier()
 
-        self.thought_service = ThoughtService(self.brain)
         self.knowledge = KnowledgeService(
             self.brain,
             repository=knowledge_repository,
         )
+        self.thought_coordinator = ThoughtCoordinator(
+            ThoughtWorker(provider),
+        )
+        self.thought_service = ThoughtService(
+            self.thought_coordinator,
+            memory=self.memory,
+            knowledge=self.knowledge,
+            identity=self.identity,
+        )
         self.raw_memory_context_limit = raw_memory_context_limit
         self.background_thoughts_enabled = enable_background_thoughts
-        self._thought_lock = threading.Lock()
 
         self.events = EventBus()
         self.events.subscribe("clock_tick", self.on_clock_tick)
@@ -79,9 +86,12 @@ class Nel:
         self.clock.start()
 
     def think(self, prompt: str) -> str:
-        self.state.set(State.THINKING)
+        coordinator = getattr(self, "thought_coordinator", None)
+        if coordinator is not None:
+            coordinator.begin_foreground()
 
         try:
+            self.state.set(State.THINKING)
             identity_context = self._identity_context()
             intent = self.intent.classify(prompt)
 
@@ -156,6 +166,8 @@ Nel:
 
         finally:
             self.state.set(State.IDLE)
+            if coordinator is not None:
+                coordinator.end_foreground()
 
     def _identity_context(self) -> dict:
         identity_service = getattr(self, "identity", None)
@@ -221,12 +233,13 @@ Nel:
 
     def stop(self) -> None:
         self.clock.stop()
+        self.thought_coordinator.shutdown()
 
     def on_clock_tick(self, data=None) -> None:
         if not self.background_thoughts_enabled:
             return
 
-        if not self._thought_lock.acquire(blocking=False):
+        if self.state.get() is not State.IDLE:
             return
 
         try:
@@ -236,8 +249,6 @@ Nel:
             self.thought_service.generate()
         except Exception as exc:
             logger.error(
-                "Background thought generation failed (%s).",
+                "Background thought start failed (%s).",
                 type(exc).__name__,
             )
-        finally:
-            self._thought_lock.release()

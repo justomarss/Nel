@@ -231,55 +231,6 @@ class RuntimeLifecycleTests(unittest.TestCase):
             [State.THINKING, State.IDLE],
         )
 
-    def test_background_failure_is_redacted_and_releases_lock(self):
-        nel = Nel.__new__(Nel)
-        nel.background_thoughts_enabled = True
-        nel._thought_lock = threading.Lock()
-        nel.decision = SimpleNamespace(should_think=lambda: True)
-        nel.thought_service = SimpleNamespace(
-            generate=lambda: (_ for _ in ()).throw(
-                RuntimeError("synthetic secret")
-            )
-        )
-
-        with self.assertLogs("src.core.nel", level="ERROR") as logs:
-            nel.on_clock_tick()
-
-        self.assertIn(
-            "Background thought generation failed (RuntimeError).",
-            logs.output[0],
-        )
-        self.assertNotIn("synthetic secret", logs.output[0])
-        self.assertTrue(nel._thought_lock.acquire(blocking=False))
-        nel._thought_lock.release()
-
-    def test_background_thoughts_do_not_overlap(self):
-        entered = threading.Event()
-        release = threading.Event()
-        calls = []
-
-        def generate():
-            calls.append(1)
-            entered.set()
-            release.wait(0.5)
-
-        nel = Nel.__new__(Nel)
-        nel.background_thoughts_enabled = True
-        nel._thought_lock = threading.Lock()
-        nel.decision = SimpleNamespace(should_think=lambda: True)
-        nel.thought_service = SimpleNamespace(generate=generate)
-
-        first = threading.Thread(target=nel.on_clock_tick)
-        first.start()
-        self.assertTrue(entered.wait(0.5))
-
-        nel.on_clock_tick()
-        release.set()
-        first.join(0.5)
-
-        self.assertFalse(first.is_alive())
-        self.assertEqual(calls, [1])
-
     def test_provider_error_does_not_expose_original_message(self):
         class Completions:
             def create(self, **kwargs):

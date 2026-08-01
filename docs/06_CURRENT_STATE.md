@@ -61,8 +61,12 @@ yet meet the first-stable criteria.
 - The CLI always stops Nel in a `finally` block.
 - Foreground provider failures become redacted application errors instead of
   terminating the CLI.
-- Background thought failures are logged without exception messages, and
-  thought generation cannot overlap.
+- Thought System v1 uses a single in-memory coordinator, bounded read-only
+  context, typed temporary observations, and deny-by-default Memory,
+  Knowledge, and Identity policies.
+- Background thought failures are logged without exception messages. Thought
+  generation cannot overlap, foreground interaction invalidates active work,
+  and late cancelled results are discarded.
 - Background thought generation is configuration-gated and defaults off;
   `Clock`, `EventBus`, `ThoughtService`, and `DecisionEngine` remain wired.
 - Raw prompt context has a configurable count limit and prefers the newest
@@ -79,7 +83,7 @@ yet meet the first-stable criteria.
 | Knowledge | Current values and superseded history are transactional; provenance beyond version history is not implemented |
 | Intent classification | Keyword rules; narrow and not robustly tested |
 | State | Operational state is an in-memory enum; persistent Nel identity is stored separately and is read into prompts without a conversation write path |
-| Thoughts | Generation code remains wired but automatic generation is disabled by default |
+| Thoughts | Minimal in-memory typed observation pipeline is wired; policies reject permanent changes and automatic generation remains disabled by default |
 | Goals | JSON helper exists but is not connected to active Nel |
 | Clock | Lifecycle is owned, but an active provider callback cannot be cancelled early |
 | Provider independence | Brain is injected, but composition hardcodes NVIDIA NIM |
@@ -100,7 +104,7 @@ yet meet the first-stable criteria.
 
 ## Tests
 
-The repository has 111 assertion-based `unittest` cases covering:
+The repository has 119 assertion-based `unittest` cases covering:
 
 - user favorite update from an older to newer value;
 - literal value preservation for different fact domains;
@@ -123,6 +127,9 @@ The repository has 111 assertion-based `unittest` cases covering:
   composition without production database writes.
 - bounded read-only identity context, preference-state filtering, namespace
   isolation, restart continuity, and identity immutability during conversation.
+- single-flight temporary thoughts, foreground cancellation, late-result
+  rejection, bounded context, failure recovery, and absence of persistent
+  thought writes.
 
 `tests/test_event.py` is a print-based EventBus smoke script, not an
 assertion-based test.
@@ -137,8 +144,8 @@ so provider integration is not yet operationally reliable.
    than relevance and can still conflict with current facts.
 2. SQLite rollback to historical JSON is no longer valid after post-cutover
    writes; recovery must use SQLite or a verified SQLite backup.
-3. Clock shutdown waits for an active callback; provider work is not
-   cancellable after it starts.
+3. In-flight thought provider work cannot be interrupted after it starts;
+   cancellation invalidates and discards its eventual result instead.
 4. `Brain.should_remember` relies on unconstrained yes/no text and a
    substring check.
 5. Structured keys are format-normalized, but semantic synonym consistency

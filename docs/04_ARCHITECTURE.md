@@ -36,7 +36,10 @@ root main.py (development CLI)
      -> EventBus
      -> Clock
         -> ThoughtService
-           -> internal-thought JSON
+           -> ThoughtCoordinator
+              -> ThoughtWorker
+              -> temporary TypedThoughtResult
+              -> deny-by-default policy boundaries
 ```
 
 This diagram describes the current prototype, not the desired stable runtime.
@@ -49,13 +52,18 @@ This diagram describes the current prototype, not the desired stable runtime.
 | Raw Memory | Historical interaction material | No, without validation | Long-term JSON list |
 | Nel Identity | Durable self-description and continuity | Yes, for Nel-owned facts | Not implemented |
 | Nel State | Current operational/internal condition | Yes within its defined lifetime | In-memory enum only |
-| Thoughts | Generated private reflection candidates | No, unless separately evaluated | Timestamped JSON entries |
+| Thoughts | Generated private reflection candidates | No, unless separately evaluated | Bounded in-memory typed observations; no persistence |
 | Goals | Explicit desired outcomes | Yes after validation/ownership rules | JSON helper, not integrated |
 | Conversation Context | Bounded material for the current exchange | No | All raw long-term memory is injected |
 | Inference | A reasoned but unverified conclusion | No | No explicit representation |
 
 Thoughts, model replies, and inferences must never silently promote themselves
 to identity, knowledge, memory, or goals.
+
+Thought System v1 permits one background thought at a time. Foreground work
+invalidates the active token, and late provider output is discarded. Memory,
+Knowledge, and Identity policies reject all thought proposals by default;
+thought components have no direct permanent-state write boundary.
 
 ## Composition and Application Layer
 

@@ -19,25 +19,3 @@ Text:
         answer = self.provider.generate(prompt).lower()
 
         return "yes" in answer
-
-    def internal_monologue(self):
-
-        prompt = """
-You are Nel.
-
-You are thinking to yourself.
-
-Nobody will read this immediately.
-
-Write ONE short internal thought.
-
-Do not answer the user.
-
-Do not explain.
-
-Only write the thought.
-
-Always write in Azerbaijani.
-"""
-
-        return self.provider.generate(prompt)
