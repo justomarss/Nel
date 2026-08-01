@@ -3,4 +3,4 @@
 __pycache__/
 *.pyc
 memory/*.json
-logs/
+logs/.env
