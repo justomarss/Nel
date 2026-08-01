@@ -203,3 +203,29 @@ Consequences: Lifecycle tests come before migration. A single-process event
 loop is a candidate, not an accepted decision.
 
 Status: Accepted.
+
+## ADR-012: Provisional NIM Model and Background Thought Policy
+
+Context: Qualification found `meta/llama-3.1-70b-instruct` to have the best
+combined Azerbaijani conversation and structured extraction quality among
+the tested NIM models, but latency and timeout reliability remain variable.
+Automatic background generation would compete with foreground requests and
+could repeatedly consume long timeout windows.
+
+Options: retain the previous model and automatic thoughts; adopt the 70B
+model for all generation; adopt the 70B model for foreground work while
+temporarily disabling automatic LLM-generated background thoughts.
+
+Decision: Adopt `meta/llama-3.1-70b-instruct` provisionally for foreground
+conversation and structured extraction. Use a 45-second request timeout with
+SDK retries disabled. Keep automatic background thoughts disabled by default
+through configuration while retaining the existing Clock, EventBus,
+ThoughtService, and DecisionEngine implementation.
+
+Consequences: Foreground requests fail once after at most one configured
+client attempt and continue through existing graceful error handling.
+Reflection code remains available but inactive by default. Re-enabling it or
+selecting a permanent model requires evidence from a faster reliable model or
+an approved scheduling policy.
+
+Status: Accepted.

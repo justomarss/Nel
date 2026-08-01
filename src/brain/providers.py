@@ -9,13 +9,14 @@ class NvidiaNimProvider:
         model: str,
         api_key: str,
         base_url: str,
-        timeout: float = 30.0,
+        timeout: float = 45.0,
     ):
         self.model = model
         self.client = OpenAI(
             api_key=api_key,
             base_url=base_url,
             timeout=timeout,
+            max_retries=0,
         )
 
     def generate(self, prompt: str) -> str:

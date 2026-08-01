@@ -5,8 +5,10 @@ import threading
 from src.brain.brain import Brain
 from src.brain.providers import NvidiaNimProvider
 from src.core.config import (
+    ENABLE_BACKGROUND_THOUGHTS,
     NVIDIA_API_KEY,
     NVIDIA_BASE_URL,
+    NVIDIA_INTERACTIVE_TIMEOUT_SECONDS,
     NVIDIA_MODEL,
     RAW_MEMORY_CONTEXT_LIMIT,
 )
@@ -31,11 +33,16 @@ logger = logging.getLogger(__name__)
 
 
 class Nel:
-    def __init__(self, raw_memory_context_limit=RAW_MEMORY_CONTEXT_LIMIT):
+    def __init__(
+        self,
+        raw_memory_context_limit=RAW_MEMORY_CONTEXT_LIMIT,
+        enable_background_thoughts=ENABLE_BACKGROUND_THOUGHTS,
+    ):
         provider = NvidiaNimProvider(
             model=NVIDIA_MODEL,
             api_key=NVIDIA_API_KEY,
             base_url=NVIDIA_BASE_URL,
+            timeout=NVIDIA_INTERACTIVE_TIMEOUT_SECONDS,
         )
 
         self.brain = Brain(provider)
@@ -47,6 +54,7 @@ class Nel:
         self.thought_service = ThoughtService(self.brain)
         self.knowledge = KnowledgeService(self.brain)
         self.raw_memory_context_limit = raw_memory_context_limit
+        self.background_thoughts_enabled = enable_background_thoughts
         self._thought_lock = threading.Lock()
 
         self.events = EventBus()
@@ -125,6 +133,9 @@ Nel:
         self.clock.stop()
 
     def on_clock_tick(self, data=None) -> None:
+        if not self.background_thoughts_enabled:
+            return
+
         if not self._thought_lock.acquire(blocking=False):
             return
 

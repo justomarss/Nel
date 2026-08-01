@@ -7,12 +7,70 @@ from unittest.mock import patch
 import main
 from src.brain.providers import NvidiaNimProvider
 from src.core.clock import Clock
+from src.core.config import (
+    ENABLE_BACKGROUND_THOUGHTS,
+    NVIDIA_INTERACTIVE_TIMEOUT_SECONDS,
+    NVIDIA_MODEL,
+)
 from src.core.nel import Nel
 from src.core.state import State
 from src.errors import ApplicationError, ProviderError
 
 
 class RuntimeLifecycleTests(unittest.TestCase):
+    def test_provisional_model_and_provider_policy(self):
+        with patch("src.brain.providers.OpenAI") as client:
+            NvidiaNimProvider(
+                model=NVIDIA_MODEL,
+                api_key="test-key",
+                base_url="https://example.invalid/v1",
+                timeout=NVIDIA_INTERACTIVE_TIMEOUT_SECONDS,
+            )
+
+        self.assertEqual(NVIDIA_MODEL, "meta/llama-3.1-70b-instruct")
+        client.assert_called_once_with(
+            api_key="test-key",
+            base_url="https://example.invalid/v1",
+            timeout=45.0,
+            max_retries=0,
+        )
+
+    def test_background_thoughts_are_disabled_by_default(self):
+        nel = Nel.__new__(Nel)
+        nel.background_thoughts_enabled = ENABLE_BACKGROUND_THOUGHTS
+        nel.decision = SimpleNamespace(
+            should_think=lambda: self.fail("decision should not run")
+        )
+        nel.thought_service = SimpleNamespace(
+            generate=lambda: self.fail("thought should not run")
+        )
+
+        nel.on_clock_tick()
+
+        self.assertFalse(ENABLE_BACKGROUND_THOUGHTS)
+
+    def test_foreground_chat_works_with_background_thoughts_disabled(self):
+        class Brain:
+            def should_remember(self, text):
+                return False
+
+            def think(self, prompt):
+                return "foreground reply"
+
+        nel = Nel.__new__(Nel)
+        nel.background_thoughts_enabled = False
+        nel.state = SimpleNamespace(set=lambda state: None)
+        nel.intent = SimpleNamespace(classify=lambda text: "CHAT")
+        nel.knowledge = SimpleNamespace(
+            answer=lambda text: None,
+            facts=lambda: {},
+        )
+        nel.memory = SimpleNamespace(recall=lambda limit=None: [])
+        nel.brain = Brain()
+        nel.raw_memory_context_limit = 20
+
+        self.assertEqual(nel.think("hello"), "foreground reply")
+
     def test_clock_start_and_stop_are_idempotent(self):
         callback_ran = threading.Event()
         calls = []
@@ -138,8 +196,42 @@ class RuntimeLifecycleTests(unittest.TestCase):
             [State.THINKING, State.IDLE],
         )
 
+    def test_foreground_timeout_becomes_application_error(self):
+        class StateRecorder:
+            def __init__(self):
+                self.states = []
+
+            def set(self, state):
+                self.states.append(state)
+
+        class TimedOutBrain:
+            def should_remember(self, text):
+                raise ProviderError(
+                    "NVIDIA NIM request failed (APITimeoutError)."
+                )
+
+        nel = Nel.__new__(Nel)
+        nel.state = StateRecorder()
+        nel.intent = SimpleNamespace(classify=lambda text: "CHAT")
+        nel.knowledge = SimpleNamespace(
+            answer=lambda text: None,
+            facts=lambda: {},
+        )
+        nel.memory = SimpleNamespace(recall=lambda limit=None: [])
+        nel.brain = TimedOutBrain()
+        nel.raw_memory_context_limit = 20
+
+        with self.assertRaises(ApplicationError):
+            nel.think("hello")
+
+        self.assertEqual(
+            nel.state.states,
+            [State.THINKING, State.IDLE],
+        )
+
     def test_background_failure_is_redacted_and_releases_lock(self):
         nel = Nel.__new__(Nel)
+        nel.background_thoughts_enabled = True
         nel._thought_lock = threading.Lock()
         nel.decision = SimpleNamespace(should_think=lambda: True)
         nel.thought_service = SimpleNamespace(
@@ -170,6 +262,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
             release.wait(0.5)
 
         nel = Nel.__new__(Nel)
+        nel.background_thoughts_enabled = True
         nel._thought_lock = threading.Lock()
         nel.decision = SimpleNamespace(should_think=lambda: True)
         nel.thought_service = SimpleNamespace(generate=generate)

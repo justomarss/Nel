@@ -11,6 +11,10 @@ NVIDIA NIM inference, generic validated user-fact extraction, JSON
 persistence, transient operational state, and a daemon-thread reflection
 clock.
 
+The provisional inference model is `meta/llama-3.1-70b-instruct`. Automatic
+LLM-generated background thoughts are disabled by default while foreground
+conversation and structured extraction remain active.
+
 The core direction is clearer than the implementation maturity. Nel does not
 yet meet the first-stable criteria.
 
@@ -18,7 +22,8 @@ yet meet the first-stable criteria.
 
 - Entry point: root `main.py`
 - Composition root: `src/core/nel.py`
-- Environment: `.env` with NVIDIA variable names documented in Start Here
+- Environment: `.env` supplies NVIDIA credentials and endpoint configuration;
+  the provisional model policy is tracked in `src/core/config.py`
 - Dependencies: `openai`, `pydantic`, `python-dotenv`, `rich`
 - Interface: interactive CLI only
 
@@ -26,7 +31,8 @@ yet meet the first-stable criteria.
 
 - `Brain` delegates text generation to an injected provider.
 - `NvidiaNimProvider` supports text and strict JSON-schema generation,
-  request timeout, empty-response checks, and redacted error messages.
+  a 45-second interactive timeout, no SDK retries, empty-response checks,
+  and redacted error messages.
 - `KnowledgeExtractor` uses a generic fact envelope, local Pydantic
   validation, generic key normalization, one repair attempt, and warning
   diagnostics.
@@ -41,6 +47,8 @@ yet meet the first-stable criteria.
   terminating the CLI.
 - Background thought failures are logged without exception messages, and
   thought generation cannot overlap.
+- Background thought generation is configuration-gated and defaults off;
+  `Clock`, `EventBus`, `ThoughtService`, and `DecisionEngine` remain wired.
 - Raw prompt context has a configurable count limit and prefers the newest
   memories without deleting older stored memory.
 - Windows stdout and stderr are configured for UTF-8 when supported.
@@ -54,7 +62,7 @@ yet meet the first-stable criteria.
 | Knowledge | Flat current-value object; no provenance or value history |
 | Intent classification | Keyword rules; narrow and not robustly tested |
 | State | In-memory enum; no persistent Nel identity or preferences |
-| Thoughts | Generated and stored, but not evaluated or integrated safely |
+| Thoughts | Generation code remains wired but automatic generation is disabled by default |
 | Goals | JSON helper exists but is not connected to active Nel |
 | Clock | Lifecycle is owned, but an active provider callback cannot be cancelled early |
 | Provider independence | Brain is injected, but composition hardcodes NVIDIA NIM |
@@ -78,7 +86,7 @@ yet meet the first-stable criteria.
 
 ## Tests
 
-The repository has sixteen `unittest` cases covering:
+The repository has twenty `unittest` cases covering:
 
 - user favorite update from an older to newer value;
 - literal value preservation for different fact domains;
@@ -111,8 +119,8 @@ so provider integration is not yet operationally reliable.
    substring check.
 5. Structured keys are format-normalized, but semantic synonym consistency
    is not guaranteed.
-6. Provider timeout applies per client attempt, so total elapsed time may
-   exceed the nominal timeout.
+6. The provisional 70B model showed variable latency in qualification; a
+   foreground request can occupy the full 45-second timeout.
 7. Tests primarily use fakes; persistence interruption and live provider
    outage behavior still lack reliable automated coverage.
 
