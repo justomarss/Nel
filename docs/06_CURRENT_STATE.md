@@ -46,11 +46,11 @@ yet meet the first-stable criteria.
 - Runtime code requires an existing integrity-checked schema-version-2
   database with the six approved persistence tables and identity immutability
   triggers. It never migrates or creates a production database at startup.
-- Identity v1 storage and runtime composition are implemented. Production is
-  still schema version 1 pending the controlled offline migration, so the
-  production CLI is intentionally blocked until that migration is completed.
+- Identity v1 storage and runtime composition are implemented. The controlled
+  production migration to schema version 2 is complete.
 - Runtime Memory, Knowledge, and Identity services share one guarded database;
-  identity remains namespace-separated and is not included in prompts.
+  identity remains namespace-separated and enters conversation prompts only
+  through a bounded read-only snapshot.
 - Current user facts are stored directly, changed values retain recoverable
   history, and validated extraction batches are transactional.
 - The verified JSON-to-SQLite cutover is complete. JSON files and the initial
@@ -78,7 +78,7 @@ yet meet the first-stable criteria.
 | Memory | Raw long-term strings; only a bounded newest subset is sent, without relevance scoring |
 | Knowledge | Current values and superseded history are transactional; provenance beyond version history is not implemented |
 | Intent classification | Keyword rules; narrow and not robustly tested |
-| State | Operational state is an in-memory enum; persistent Nel identity is stored separately and is not yet prompt-integrated |
+| State | Operational state is an in-memory enum; persistent Nel identity is stored separately and is read into prompts without a conversation write path |
 | Thoughts | Generation code remains wired but automatic generation is disabled by default |
 | Goals | JSON helper exists but is not connected to active Nel |
 | Clock | Lifecycle is owned, but an active provider callback cannot be cancelled early |
@@ -89,7 +89,7 @@ yet meet the first-stable criteria.
 
 ## Not Implemented
 
-- automatic Nel preference learning and identity prompt integration;
+- automatic Nel preference learning or promotion;
 - semantic retrieval evaluation;
 - configuration-driven provider selection;
 - safe long-running runtime lifecycle;
@@ -100,7 +100,7 @@ yet meet the first-stable criteria.
 
 ## Tests
 
-The repository has 102 assertion-based `unittest` cases covering:
+The repository has 111 assertion-based `unittest` cases covering:
 
 - user favorite update from an older to newer value;
 - literal value preservation for different fact domains;
@@ -121,6 +121,8 @@ The repository has 102 assertion-based `unittest` cases covering:
 - generic Azerbaijani user/Nel perspective ownership.
 - schema-v2 identity migration, immutability, history, backup, and runtime
   composition without production database writes.
+- bounded read-only identity context, preference-state filtering, namespace
+  isolation, restart continuity, and identity immutability during conversation.
 
 `tests/test_event.py` is a print-based EventBus smoke script, not an
 assertion-based test.

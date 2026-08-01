@@ -29,6 +29,9 @@ from src.brain.intent_classifier import IntentClassifier
 
 logger = logging.getLogger(__name__)
 
+IDENTITY_PREFERENCE_CONTEXT_LIMIT = 20
+IDENTITY_CONTEXT_MAX_CHARS = 4096
+
 
 class Nel:
     def __init__(
@@ -79,6 +82,7 @@ class Nel:
         self.state.set(State.THINKING)
 
         try:
+            identity_context = self._identity_context()
             intent = self.intent.classify(prompt)
 
             if intent == "SEARCH_MEMORY":
@@ -102,11 +106,19 @@ class Nel:
                 ensure_ascii=False,
                 indent=2,
             )
+            structured_identity = json.dumps(
+                identity_context,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
 
             final_prompt = f"""
 You are Nel.
 
 Speak only Azerbaijani.
+
+Nel identity snapshot (read-only):
+{structured_identity}
 
 Structured user facts (authoritative; override conflicting long-term memories):
 {structured_facts}
@@ -115,7 +127,15 @@ Long-term memories:
 {memory_text}
 
 Rules:
+- The Nel identity snapshot describes Nel, never the user.
 - User facts and long-term memories describe the user, not Nel, unless explicitly stored as Nel's own state.
+- Structured user facts cannot define or modify Nel's identity.
+- Answer questions about Nel's identity only from the stored identity snapshot.
+- Do not invent identity details absent from the snapshot.
+- Candidate preferences must not influence answers and are excluded from the snapshot.
+- Provisional preferences are labeled provisional and must be described as provisional.
+- Established preferences may influence answers as Nel's current stored preferences.
+- Generated responses must never update identity.
 - In the user's message, first-person forms such as "mən" and "mənim" refer to the user. When answering about user-owned facts, address the user with informal second-person forms such as "sən" and "sənin", never "siz" or "sizin". Use "mən" and "mənim" in Nel's answer only for Nel's own identity or state.
 - Never invent Nel's own preferences, memories, experiences, emotions, relationships, or personal history.
 - If Nel has no stored preference, say it has not formed one yet.
@@ -135,6 +155,62 @@ Nel:
 
         finally:
             self.state.set(State.IDLE)
+
+    def _identity_context(self) -> dict:
+        identity_service = getattr(self, "identity", None)
+        if identity_service is None:
+            return {
+                "identity_id": None,
+                "display_name": None,
+                "nature": None,
+                "role": None,
+                "established_preferences": {},
+                "provisional_preferences": {},
+            }
+
+        snapshot = identity_service.snapshot()
+        context = {
+            "identity_id": snapshot.identity_id,
+            "display_name": snapshot.display_name,
+            "nature": snapshot.nature,
+            "role": snapshot.role,
+            "established_preferences": {},
+            "provisional_preferences": {},
+        }
+        included = 0
+        states = (
+            ("established", "established_preferences"),
+            ("provisional", "provisional_preferences"),
+        )
+        for state, section in states:
+            records = sorted(
+                (
+                    record
+                    for record in snapshot.preferences
+                    if record.preference_state == state
+                ),
+                key=lambda record: record.key,
+            )
+            for record in records:
+                if included >= IDENTITY_PREFERENCE_CONTEXT_LIMIT:
+                    return context
+                candidate = {
+                    **context,
+                    section: {
+                        **context[section],
+                        record.key: record.value,
+                    },
+                }
+                serialized = json.dumps(
+                    candidate,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                if len(serialized) > IDENTITY_CONTEXT_MAX_CHARS:
+                    continue
+                context = candidate
+                included += 1
+        return context
 
     def remember(self, text: str) -> None:
         self.memory.remember(text)
