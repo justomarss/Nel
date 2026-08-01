@@ -43,9 +43,11 @@ yet meet the first-stable criteria.
   second-person answers while Nel-owned identity remains first-person.
 - Runtime Memory and Knowledge use one shared, guarded SQLite database at
   `memory/nel.sqlite3` by default.
-- Runtime code requires an existing integrity-checked schema-version-2
-  database with the six approved persistence tables and identity immutability
-  triggers. It never migrates or creates a production database at startup.
+- Runtime code requires an existing integrity-checked schema-version-3
+  database with exactly the eight approved persistence tables, the goal index,
+  and identity immutability triggers. It never migrates or creates a production
+  database at startup. Production remains schema version 2 until the controlled
+  migration, so the updated runtime must not be started against it yet.
 - Identity v1 storage and runtime composition are implemented. The controlled
   production migration to schema version 2 is complete.
 - Runtime Memory, Knowledge, and Identity services share one guarded database;

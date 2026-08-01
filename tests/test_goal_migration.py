@@ -285,15 +285,22 @@ class GoalMigrationTests(unittest.TestCase):
                 with database.transaction() as connection:
                     connection.execute(statement, invalid)
 
-    def test_guarded_v3_validation_is_explicit_not_runtime_default(self):
+    def test_guarded_v3_validation_is_runtime_default(self):
         with tempfile.TemporaryDirectory() as directory:
             path, database = self._v2_database(directory)
             migrate_goal_schema_v2_to_v3(database)
             guarded = SQLiteDatabase(path, require_existing=True)
 
             guarded.validate_existing(expected_version=3)
-            with self.assertRaises(RuntimeError):
-                guarded.validate_existing()
+            guarded.validate_existing()
+
+    def test_guarded_v2_validation_remains_explicitly_supported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path, _database = self._v2_database(directory)
+
+            SQLiteDatabase(path, require_existing=True).validate_existing(
+                expected_version=2
+            )
 
 
 if __name__ == "__main__":

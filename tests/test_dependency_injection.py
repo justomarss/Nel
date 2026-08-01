@@ -132,14 +132,17 @@ class DependencyInjectionTests(unittest.TestCase):
     @patch("src.core.nel.Clock.start")
     def test_injected_identity_service_is_retained(self, _clock_start):
         identity_service = object()
+        goal_service = object()
         nel = Nel(
             provider=FakeProvider(),
             memory_repository=InMemoryMemoryRepository(),
             knowledge_repository=AtomicKnowledgeRepository(),
             identity_service=identity_service,
+            goal_service=goal_service,
         )
         try:
             self.assertIs(nel.identity, identity_service)
+            self.assertIs(nel.goals, goal_service)
         finally:
             nel.stop()
 

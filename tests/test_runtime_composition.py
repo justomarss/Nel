@@ -9,7 +9,9 @@ from unittest.mock import patch
 import main
 from src.core.runtime import create_runtime_nel
 from src.errors import ApplicationError, PersistenceStartupError, ProviderError
+from src.goals import GoalCandidate, GoalOwner, GoalService
 from src.identity import IdentityService
+from src.persistence.goal_migration import migrate_goal_schema_v2_to_v3
 from src.persistence.identity_migration import (
     IDENTITY_BOOTSTRAP,
     migrate_identity_schema_v1_to_v2,
@@ -55,7 +57,7 @@ class RuntimeCompositionTests(unittest.TestCase):
         database.initialize("2026-08-02T00:00:00Z")
         return path, database
 
-    def _database(self, directory, name="nel.sqlite3"):
+    def _v2_database(self, directory, name="nel.sqlite3"):
         path, database = self._v1_database(directory, name)
         migrate_identity_schema_v1_to_v2(
             database,
@@ -63,8 +65,30 @@ class RuntimeCompositionTests(unittest.TestCase):
         )
         return path, database
 
+    def _database(self, directory, name="nel.sqlite3"):
+        path, database = self._v2_database(directory, name)
+        migrate_goal_schema_v2_to_v3(
+            database,
+            "2026-08-02T02:00:00Z",
+        )
+        return path, database
+
+    @staticmethod
+    def _create_goal(service):
+        return service.create(
+            GoalCandidate(
+                title="Temporary goal",
+                success_condition="Explicitly accepted in the test",
+                owner=GoalOwner.USER,
+                source_kind="validated_user",
+                source_reference="test:runtime",
+            ),
+            explicit_user_approval=True,
+            approval_reference="test:approval",
+        )
+
     @patch("src.core.nel.Clock.start")
-    def test_default_runtime_uses_sqlite_only(self, _clock_start):
+    def test_default_runtime_uses_schema_v3_sqlite_only(self, _clock_start):
         with tempfile.TemporaryDirectory() as directory:
             path, _database = self._database(directory)
             with patch("src.core.runtime.NEL_DATABASE_PATH", path):
@@ -75,10 +99,15 @@ class RuntimeCompositionTests(unittest.TestCase):
                 self.assertIsInstance(memory, SQLiteMemory)
                 self.assertIsInstance(knowledge, SQLiteKnowledge)
                 self.assertIsInstance(nel.identity, IdentityService)
+                self.assertIsInstance(nel.goals, GoalService)
                 self.assertIs(memory.database, knowledge.database)
                 self.assertIs(
                     memory.database,
                     nel.identity._repository.database,
+                )
+                self.assertIs(
+                    memory.database,
+                    nel.goals._repository.database,
                 )
                 self.assertEqual(memory.database.path, path)
                 self.assertTrue(memory.database.require_existing)
@@ -92,6 +121,21 @@ class RuntimeCompositionTests(unittest.TestCase):
     def test_schema_v1_production_startup_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path, _database = self._v1_database(directory)
+
+            with self.assertRaises(PersistenceStartupError) as raised:
+                create_runtime_nel(
+                    provider=FakeProvider(),
+                    database_path=path,
+                )
+
+            self.assertEqual(
+                str(raised.exception),
+                "SQLite persistence is unavailable or invalid.",
+            )
+
+    def test_schema_v2_production_startup_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path, _database = self._v2_database(directory)
 
             with self.assertRaises(PersistenceStartupError) as raised:
                 create_runtime_nel(
@@ -145,7 +189,7 @@ class RuntimeCompositionTests(unittest.TestCase):
                 connection.execute("DELETE FROM schema_version")
                 connection.execute(
                     "INSERT INTO schema_version (version, applied_at) "
-                    "VALUES (3, '2026-08-02T00:00:00Z')"
+                    "VALUES (4, '2026-08-02T00:00:00Z')"
                 )
 
             with self.assertRaises(PersistenceStartupError):
@@ -197,6 +241,30 @@ class RuntimeCompositionTests(unittest.TestCase):
                     database_path=path,
                 )
 
+    def test_partial_goal_schema_fails_safely(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path, database = self._database(directory)
+            with database.transaction() as connection:
+                connection.execute("DROP TABLE goals_history")
+
+            with self.assertRaises(PersistenceStartupError):
+                create_runtime_nel(
+                    provider=FakeProvider(),
+                    database_path=path,
+                )
+
+    def test_missing_goal_index_fails_safely(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path, database = self._database(directory)
+            with database.transaction() as connection:
+                connection.execute("DROP INDEX goals_current_state_updated_idx")
+
+            with self.assertRaises(PersistenceStartupError):
+                create_runtime_nel(
+                    provider=FakeProvider(),
+                    database_path=path,
+                )
+
     @patch("src.core.nel.Clock.start")
     def test_sqlite_data_survives_nel_reconstruction(self, _clock_start):
         with tempfile.TemporaryDirectory() as directory:
@@ -207,6 +275,7 @@ class RuntimeCompositionTests(unittest.TestCase):
                 database_path=path,
             )
             first_identity = first.identity.snapshot()
+            first_goal = self._create_goal(first.goals)
             first.remember("Yaddaş: Ömər")
             first.knowledge.knowledge.set("name", "Ömər")
             first.stop()
@@ -217,13 +286,17 @@ class RuntimeCompositionTests(unittest.TestCase):
             )
             try:
                 self.assertEqual(second.identity.snapshot(), first_identity)
+                self.assertEqual(second.goals.get(first_goal.goal_id), first_goal)
                 self.assertEqual(second.memory.recall(), ["Yaddaş: Ömər"])
                 self.assertEqual(second.knowledge.get("name"), "Ömər")
             finally:
                 second.stop()
 
     @patch("src.core.nel.Clock.start")
-    def test_user_facts_and_identity_are_isolated(self, _clock_start):
+    def test_goal_user_fact_and_identity_namespaces_are_isolated(
+        self,
+        _clock_start,
+    ):
         with tempfile.TemporaryDirectory() as directory:
             path, _database = self._database(directory)
             nel = create_runtime_nel(
@@ -232,6 +305,8 @@ class RuntimeCompositionTests(unittest.TestCase):
             )
             try:
                 nel.knowledge.knowledge.set("display_name", "User name")
+                nel.knowledge.knowledge.set("goal_id", "user namespace")
+                goal = self._create_goal(nel.goals)
                 self.assertEqual(
                     nel.knowledge.get("display_name"),
                     "User name",
@@ -239,6 +314,11 @@ class RuntimeCompositionTests(unittest.TestCase):
                 self.assertEqual(
                     nel.identity.snapshot().display_name,
                     IDENTITY_BOOTSTRAP["display_name"],
+                )
+                self.assertEqual(nel.goals.get(goal.goal_id), goal)
+                self.assertEqual(
+                    nel.knowledge.get("goal_id"),
+                    "user namespace",
                 )
             finally:
                 nel.stop()
@@ -259,6 +339,8 @@ class RuntimeCompositionTests(unittest.TestCase):
                 database_path=path,
             )
             before_identity = nel.identity.snapshot()
+            self._create_goal(nel.goals)
+            before_goals = nel.goals.list_current()
             try:
                 with self.assertRaises(ApplicationError):
                     nel.think("Salam")
@@ -268,6 +350,7 @@ class RuntimeCompositionTests(unittest.TestCase):
             self.assertEqual(memory.recall(), before_memory)
             self.assertEqual(knowledge.load(), before_facts)
             self.assertEqual(nel.identity.snapshot(), before_identity)
+            self.assertEqual(nel.goals.list_current(), before_goals)
             SQLiteDatabase(path, require_existing=True).validate_existing()
 
     @patch("src.core.nel.Clock.start")

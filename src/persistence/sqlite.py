@@ -5,8 +5,9 @@ from pathlib import Path
 
 
 SCHEMA_VERSION = 1
-ACTIVE_SCHEMA_VERSION = 2
+IDENTITY_SCHEMA_VERSION = 2
 GOAL_SCHEMA_VERSION = 3
+ACTIVE_SCHEMA_VERSION = GOAL_SCHEMA_VERSION
 V1_EXPECTED_TABLES = {
     "schema_version",
     "memory_events",
@@ -480,7 +481,7 @@ class SQLiteDatabase:
             expected_columns = V1_EXPECTED_COLUMNS
             expected_triggers = set()
             expected_indexes = {}
-        elif expected_version == ACTIVE_SCHEMA_VERSION:
+        elif expected_version == IDENTITY_SCHEMA_VERSION:
             expected_tables = EXPECTED_TABLES
             expected_columns = EXPECTED_COLUMNS
             expected_triggers = IDENTITY_TRIGGERS
