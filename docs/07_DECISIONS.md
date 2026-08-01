@@ -493,3 +493,92 @@ physical prototype provides concrete constraints, and no interface may become
 a separate authority for Nel's identity or memory.
 
 Status: Accepted.
+
+## ADR-015: Persistent Nel Identity v1
+
+Context: Nel requires continuity that survives sessions and provider changes,
+but generated personality prose is not authoritative identity. User facts,
+temporary thoughts, and Nel-owned identity need an explicit conceptual
+boundary before identity persistence is implemented.
+
+Options: define identity through prompts; treat generated text as identity;
+build a broad autonomous personality-learning system; establish a minimal
+structured identity with controlled updates and recoverable history.
+
+Decision: Identity v1 consists only of a stable identity ID, display name,
+artificial nature, role as Ömər's persistent digital companion, and
+provider-independent continuity. Nel identity must use a separate namespace
+and storage boundary from user facts. Persistent identity must retain direct
+current records and recoverable history. Only `IdentityService` may modify
+identity.
+
+Preferences use four states: `candidate`, `provisional`, `established`, and
+`retired`. A user cannot directly assign Nel a preference, and one model
+response cannot create one. Identity v1 may accept manually or experimentally
+supplied candidate evidence and apply simple controlled promotion rules. It
+does not define a complex autonomous preference-learning algorithm. Generated
+text and temporary thoughts may propose candidates but never become identity
+automatically.
+
+Consequences: Identity must remain structured, provider-neutral, auditable,
+and distinct from user knowledge. Implementation requires a separately
+approved storage/schema change; this decision does not authorize database
+tables or runtime integration. Evidence graphs, complex confidence formulas,
+the long-term belief engine, automatic personality-trait formation,
+relationship modeling, sensor-derived identity, emotional identity,
+multi-user or multi-device identity, and autonomous constitutional changes
+remain deferred.
+
+Status: Accepted.
+
+## ADR-016: Internal Thought System v1
+
+Context: Nel needs a bounded internal process that is separate from
+conversation, memory, knowledge, identity, goals, and actions. Existing
+generated internal text must not acquire authority merely because a model
+produced it. The governing principle is: "A thought is an observation, never
+an authority."
+
+Options: treat internal model text as persistent thought or truth; permit
+thoughts to write directly to owned state; build a continuous autonomous
+monologue and scheduler; use temporary observations that can cross only
+explicit policy boundaries.
+
+Decision: A Thought v1 instance is one temporary, bounded internal observation
+created for a specific reason. Generated thought text is not truth. A thought
+is not conversation, memory, knowledge, identity, a goal, or an action, and it
+cannot directly modify any of them or external state.
+
+A thought may produce typed candidates. A memory-related candidate contains
+only an observation candidate, retention reason, source reference, and
+durability suggestion. `MemoryPolicy` decides whether anything may reach
+`MemoryService`. Knowledge, identity, future goal, and action candidates must
+respectively pass through `KnowledgePolicy`, `IdentityPolicy`, future
+`GoalPolicy`, and `Decision/PermissionPolicy`, followed by the service that
+owns the permanent state. A generated thought or temporary thought record can
+never bypass these policies.
+
+Thought System v1 has one coordinator, one active background thought at most,
+read-only bounded context, typed candidate validation, and policy boundaries.
+Its only lifecycle states are `idle` and `running`. Completion or failure
+returns the coordinator to `idle`. Cancellation invalidates the active job
+token and returns it to `idle`; any late result carrying that token is
+discarded. No queue, complex scheduler, or persistent thought database is
+approved.
+
+Background thinking remains disabled by default. If separately enabled after
+reliability approval, it must be bounded by a timeout and resource limit.
+Foreground interaction always has priority and cancels or invalidates active
+background work. Device events from a future screen, microphone, or camera may
+eventually supply permitted observations, but the thought system remains
+hardware-independent and those observations gain no authority automatically.
+
+Consequences: Permanent changes require validation by both the owning policy
+and service. Raw thought text should disappear after use and must not be shown
+as conversation or treated as durable state. The current Clock,
+DecisionEngine, and ThoughtService are retained code but do not yet implement
+this boundary. Persistent thought storage, continuous monologue, emotion,
+autonomous goals, external actions, self-modification, consciousness modeling,
+and complex preference learning remain deferred.
+
+Status: Accepted.
