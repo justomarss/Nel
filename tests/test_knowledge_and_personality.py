@@ -131,7 +131,7 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
                 pass
 
         class Memory:
-            def recall(self):
+            def recall(self, limit=None):
                 return ["The user's favorite anime used to be Bleach."]
 
         class StoredKnowledge:
@@ -163,6 +163,7 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
         nel.knowledge = KnowledgeService.__new__(KnowledgeService)
         nel.knowledge.knowledge = StoredKnowledge()
         nel.brain = Brain()
+        nel.raw_memory_context_limit = 20
 
         response = nel.think("Sənin ən sevdiyin anime hansıdır?")
 

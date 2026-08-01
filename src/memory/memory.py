@@ -29,5 +29,12 @@ class Memory:
         data.append(text)
         self.save_long(data)
 
-    def recall(self):
-        return self.load_long()
+    def recall(self, limit=None):
+        memories = self.load_long()
+
+        if limit is None:
+            return memories
+        if limit == 0:
+            return []
+
+        return memories[-limit:]

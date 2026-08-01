@@ -1,8 +1,16 @@
 import json
+import logging
+import threading
 
 from src.brain.brain import Brain
 from src.brain.providers import NvidiaNimProvider
-from src.core.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, NVIDIA_MODEL
+from src.core.config import (
+    NVIDIA_API_KEY,
+    NVIDIA_BASE_URL,
+    NVIDIA_MODEL,
+    RAW_MEMORY_CONTEXT_LIMIT,
+)
+from src.errors import ApplicationError, ProviderError
 
 from src.memory.memory import Memory
 
@@ -19,8 +27,11 @@ from src.services.knowledge_service import KnowledgeService
 from src.brain.intent_classifier import IntentClassifier
 
 
+logger = logging.getLogger(__name__)
+
+
 class Nel:
-    def __init__(self):
+    def __init__(self, raw_memory_context_limit=RAW_MEMORY_CONTEXT_LIMIT):
         provider = NvidiaNimProvider(
             model=NVIDIA_MODEL,
             api_key=NVIDIA_API_KEY,
@@ -35,6 +46,8 @@ class Nel:
 
         self.thought_service = ThoughtService(self.brain)
         self.knowledge = KnowledgeService(self.brain)
+        self.raw_memory_context_limit = raw_memory_context_limit
+        self._thought_lock = threading.Lock()
 
         self.events = EventBus()
         self.events.subscribe("clock_tick", self.on_clock_tick)
@@ -60,7 +73,9 @@ class Nel:
             if self.brain.should_remember(prompt):
                 self.memory.remember(prompt)
 
-            memories = self.memory.recall()
+            memories = self.memory.recall(
+                limit=self.raw_memory_context_limit,
+            )
             memory_text = "\n".join(memories)
             structured_facts = json.dumps(
                 self.knowledge.facts(),
@@ -92,6 +107,11 @@ Nel:
 
             return self.brain.think(final_prompt)
 
+        except ProviderError:
+            raise ApplicationError(
+                "Model provayderi hazırda əlçatan deyil."
+            ) from None
+
         finally:
             self.state.set(State.IDLE)
 
@@ -101,8 +121,22 @@ Nel:
     def tick(self) -> None:
         self.events.emit("clock_tick")
 
+    def stop(self) -> None:
+        self.clock.stop()
+
     def on_clock_tick(self, data=None) -> None:
-        if not self.decision.should_think():
+        if not self._thought_lock.acquire(blocking=False):
             return
 
-        self.thought_service.generate()
+        try:
+            if not self.decision.should_think():
+                return
+
+            self.thought_service.generate()
+        except Exception as exc:
+            logger.error(
+                "Background thought generation failed (%s).",
+                type(exc).__name__,
+            )
+        finally:
+            self._thought_lock.release()

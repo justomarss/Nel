@@ -35,6 +35,14 @@ yet meet the first-stable criteria.
   prohibits fabricated Nel preferences and history.
 - `StateManager`, `EventBus`, `Clock`, `DecisionEngine`, and
   `ThoughtService` are wired through `src/core/nel.py`.
+- `Clock` owns a cancellable thread with idempotent startup and shutdown.
+- The CLI always stops Nel in a `finally` block.
+- Foreground provider failures become redacted application errors instead of
+  terminating the CLI.
+- Background thought failures are logged without exception messages, and
+  thought generation cannot overlap.
+- Raw prompt context has a configurable count limit and prefers the newest
+  memories without deleting older stored memory.
 - Windows stdout and stderr are configured for UTF-8 when supported.
 - Private JSON memory and `.env` are ignored by Git.
 
@@ -42,15 +50,15 @@ yet meet the first-stable criteria.
 
 | Capability | Current limitation |
 |---|---|
-| Memory | Raw long-term strings; every entry is sent to the model |
+| Memory | Raw long-term strings; only a bounded newest subset is sent, without relevance scoring |
 | Knowledge | Flat current-value object; no provenance or value history |
 | Intent classification | Keyword rules; narrow and not robustly tested |
 | State | In-memory enum; no persistent Nel identity or preferences |
 | Thoughts | Generated and stored, but not evaluated or integrated safely |
 | Goals | JSON helper exists but is not connected to active Nel |
-| Clock | Daemon thread starts automatically; lifecycle and failures are unmanaged |
+| Clock | Lifecycle is owned, but an active provider callback cannot be cancelled early |
 | Provider independence | Brain is injected, but composition hardcodes NVIDIA NIM |
-| Error handling | Provider errors are clear but generally propagate to the CLI |
+| Error handling | Provider and background thought failures are bounded; persistence failures remain unhandled |
 | Retrieval | Structured facts enter prompts, but there is no relevant-memory retrieval |
 | Silence/autonomy | Reflection exists; controlled silence and topic initiation do not |
 
@@ -70,7 +78,7 @@ yet meet the first-stable criteria.
 
 ## Tests
 
-The repository has six `unittest` cases covering:
+The repository has sixteen `unittest` cases covering:
 
 - user favorite update from an older to newer value;
 - literal value preservation for different fact domains;
@@ -78,6 +86,12 @@ The repository has six `unittest` cases covering:
 - no-fact extraction;
 - one malformed-JSON repair followed by visible failure;
 - prompt protection against unstored Nel preferences.
+- idempotent Clock lifecycle and callback-failure survival;
+- CLI cleanup and foreground provider-error recovery;
+- state restoration after provider failure;
+- provider and background-log secret redaction;
+- prevention of overlapping background thoughts;
+- bounded newest-memory recall and full on-disk preservation.
 
 `tests/test_event.py` is a print-based EventBus smoke script, not an
 assertion-based test.
@@ -88,33 +102,39 @@ so provider integration is not yet operationally reliable.
 
 ## Known Technical Risks
 
-1. Raw history grows without a context bound and can conflict with current
-   facts.
+1. Raw history is count-bounded in prompts but selected by recency rather
+   than relevance and can still conflict with current facts.
 2. JSON read-modify-write operations are not atomic or concurrency-safe.
-3. The Clock can trigger provider calls on a background daemon thread without
-   exception isolation or overlap prevention.
-4. Exiting the CLI does not explicitly stop owned runtime components.
-5. `Brain.should_remember` relies on unconstrained yes/no text and a
+3. Clock shutdown waits for an active callback; provider work is not
+   cancellable after it starts.
+4. `Brain.should_remember` relies on unconstrained yes/no text and a
    substring check.
-6. Structured keys are format-normalized, but semantic synonym consistency
+5. Structured keys are format-normalized, but semantic synonym consistency
    is not guaranteed.
-7. Provider timeout applies per client attempt, so total elapsed time may
+6. Provider timeout applies per client attempt, so total elapsed time may
    exceed the nominal timeout.
-8. Tests primarily use fakes; startup, shutdown, persistence interruption,
-   and provider outage behavior lack automated coverage.
+7. Tests primarily use fakes; persistence interruption and live provider
+   outage behavior still lack reliable automated coverage.
 
 ## Legacy, Duplicate, and Placeholder Code
 
-The supported path uses `src/core/nel.py`, but the repository also contains
-older parallel modules including `src/nel.py`, `src/brain.py`,
-`src/state.py`, `src/life_loop.py`, and `src/main.py`.
+The isolated legacy runtime (`src/main.py`, `src/nel.py`,
+`src/brain.py`, `src/state.py`, and `src/life_loop.py`) was removed
+after reference, import, and regression checks confirmed the root
+`main.py` and `src/core/nel.py` path does not use it.
 
-Several files are empty or placeholders, including brain planner/thinker/chat
-modules, service modules, scheduler/planner packages, voice, vision, and
-tools. Their intended status has not been formally decided.
+Retained future placeholders are classified as dormant, not implemented:
+`src/brain/chat_engine.py`, `src/brain/memory_judge.py`,
+`src/brain/planner.py`, `src/brain/thinker.py`, empty service modules,
+and planner, scheduler, tools, voice, and vision package shells. They are not
+evidence that those capabilities exist and must not be expanded outside the
+roadmap.
 
-`TODO.md` describes a sprint sequence that conflicts with the accepted
-capability-first roadmap and includes deferred interface/framework work.
+`src/memory/goals.py` is an unfinished, unintegrated prototype.
+`src/memory.py` is an empty obsolete placeholder retained for a later
+cleanup decision.
+
+`TODO.md` is now a deprecation pointer to the authoritative roadmap.
 
 ## Documentation State
 
@@ -123,20 +143,13 @@ design documents remain present but are non-normative until reconciled.
 
 ## Current Contradictions With Direction
 
-- The target requires relevant retrieval; current prompts include all raw
-  long-term memory.
+- The target requires relevant retrieval; current prompts use a bounded newest
+  subset without relevance scoring.
 - The target separates user and Nel identity; Nel-owned persistent storage
   does not exist.
 - The target requires recoverable supersession; current structured values
   overwrite without history.
 - The target is provider-independent; construction currently hardcodes NIM.
-- The target requires graceful failure; provider and background errors are
-  not handled end to end.
-- The target requires reliable stop behavior; the daemon Clock is not stopped
-  explicitly by the CLI.
-- The target prohibits premature framework/interface work; legacy TODO items
-  still advertise CLI plugins, voice, vision, and desktop control as near-term
-  sprints.
 
 ## Provisional Baseline Choices
 

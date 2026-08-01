@@ -1,33 +1,10 @@
-# Nel Roadmap
+# Deprecated Roadmap
 
-## Sprint 1 ✅
-- [x] Brain
-- [x] Memory
-- [x] Event Bus
-- [x] Clock
-- [x] State
-- [x] Decision Engine
-- [x] Thoughts
-- [x] Knowledge
-- [x] Intent Classifier
+This file is retained only as a compatibility pointer.
 
-## Sprint 2
-- [ ] Planner
-- [ ] Knowledge Extractor
-- [ ] Semantic Memory
-- [ ] Reflection
-- [ ] Goal Manager
+The authoritative capability-based roadmap is:
 
-## Sprint 3
-- [ ] Emotion
-- [ ] Curiosity
-- [ ] Personality
+- [docs/05_ROADMAP.md](docs/05_ROADMAP.md)
 
-## Sprint 4
-- [ ] Vision
-- [ ] Voice
-- [ ] Desktop Control
-
-## Sprint 5
-- [ ] Nel CLI
-- [ ] Plugin System
+Do not use the former sprint list to schedule CLI framework, plugins, voice,
+vision, desktop control, or other deferred capabilities.

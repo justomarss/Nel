@@ -63,6 +63,11 @@ Required environment variable names are:
 
 Never print their values. Never commit `.env`.
 
+Optional runtime configuration:
+
+- `RAW_MEMORY_CONTEXT_LIMIT`: non-negative maximum number of newest raw
+  memories included in a prompt; defaults to `20`.
+
 Run the focused automated tests with:
 
 ```powershell

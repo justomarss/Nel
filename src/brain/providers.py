@@ -1,5 +1,7 @@
 from openai import OpenAI
 
+from src.errors import ProviderError
+
 
 class NvidiaNimProvider:
     def __init__(
@@ -53,15 +55,15 @@ class NvidiaNimProvider:
             response = self.client.chat.completions.create(**request)
         except Exception as exc:
             error_type = type(exc).__name__
-            raise RuntimeError(
+            raise ProviderError(
                 f"NVIDIA NIM request failed ({error_type})."
-            ) from exc
+            ) from None
 
         if not response.choices:
-            raise RuntimeError("NVIDIA NIM returned an empty response.")
+            raise ProviderError("NVIDIA NIM returned an empty response.")
 
         content = response.choices[0].message.content
         if not content or not content.strip():
-            raise RuntimeError("NVIDIA NIM returned an empty response.")
+            raise ProviderError("NVIDIA NIM returned an empty response.")
 
         return content
