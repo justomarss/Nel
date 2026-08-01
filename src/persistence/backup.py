@@ -6,10 +6,15 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from src.persistence.identity_migration import (
+    IDENTITY_BOOTSTRAP,
+    IDENTITY_SCHEMA_VERSION,
+    IDENTITY_TABLES,
+)
 from src.persistence.sqlite import SCHEMA_VERSION
 
 
-EXPECTED_TABLES = {
+V1_TABLES = {
     "schema_version",
     "memory_events",
     "user_facts_current",
@@ -39,6 +44,8 @@ class _Snapshot:
     memory_rows: tuple[tuple, ...]
     current_fact_rows: tuple[tuple, ...]
     history_rows: tuple[tuple, ...]
+    identity_current_rows: tuple[tuple, ...] = ()
+    identity_history_rows: tuple[tuple, ...] = ()
 
 
 def _utc_now() -> str:
@@ -77,6 +84,24 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
     if integrity != ["ok"]:
         raise BackupValidationError("Backup integrity validation failed.")
 
+    try:
+        schema_versions = tuple(
+            row["version"]
+            for row in connection.execute(
+                "SELECT version FROM schema_version ORDER BY version"
+            )
+        )
+    except sqlite3.DatabaseError:
+        raise BackupValidationError(
+            "Backup schema version is incompatible."
+        ) from None
+    if schema_versions == (SCHEMA_VERSION,):
+        expected_tables = V1_TABLES
+    elif schema_versions == (IDENTITY_SCHEMA_VERSION,):
+        expected_tables = V1_TABLES | IDENTITY_TABLES
+    else:
+        raise BackupValidationError("Backup schema version is incompatible.")
+
     tables = {
         row["name"]
         for row in connection.execute(
@@ -87,17 +112,8 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
             """
         )
     }
-    if tables != EXPECTED_TABLES:
+    if tables != expected_tables:
         raise BackupValidationError("Backup table validation failed.")
-
-    schema_versions = tuple(
-        row["version"]
-        for row in connection.execute(
-            "SELECT version FROM schema_version ORDER BY version"
-        )
-    )
-    if schema_versions != (SCHEMA_VERSION,):
-        raise BackupValidationError("Backup schema version is incompatible.")
 
     memory_rows = tuple(
         tuple(row)
@@ -133,6 +149,33 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
             """
         )
     )
+    identity_current_rows = ()
+    identity_history_rows = ()
+    if schema_versions == (IDENTITY_SCHEMA_VERSION,):
+        identity_current_rows = tuple(
+            tuple(row)
+            for row in connection.execute(
+                """
+                SELECT identity_key, record_type, value, preference_state,
+                       immutable, source_kind, source_reference, version,
+                       updated_at
+                FROM nel_identity_current
+                ORDER BY identity_key
+                """
+            )
+        )
+        identity_history_rows = tuple(
+            tuple(row)
+            for row in connection.execute(
+                """
+                SELECT id, identity_key, record_type, value, preference_state,
+                       immutable, source_kind, source_reference, version,
+                       valid_from, superseded_at
+                FROM nel_identity_history
+                ORDER BY identity_key, version
+                """
+            )
+        )
     counts = tuple(
         connection.execute(
             """
@@ -172,11 +215,52 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
     for row in history_rows:
         _check_utf8(row)
 
+    if schema_versions == (IDENTITY_SCHEMA_VERSION,):
+        core = {
+            row[0]: row[2]
+            for row in identity_current_rows
+            if row[1] == "core"
+        }
+        if core != IDENTITY_BOOTSTRAP:
+            raise BackupValidationError("Backup identity core is inconsistent.")
+
+        identity_versions = {
+            row[0]: row[7] for row in identity_current_rows
+        }
+        identity_history_versions = {}
+        for row in identity_history_rows:
+            identity_history_versions.setdefault(row[1], []).append(row[8])
+            if row[2] == "core":
+                raise BackupValidationError(
+                    "Backup immutable identity history is inconsistent."
+                )
+        if set(identity_history_versions) - set(identity_versions):
+            raise BackupValidationError(
+                "Backup identity history is inconsistent."
+            )
+        for key, version in identity_versions.items():
+            if version < 1:
+                raise BackupValidationError(
+                    "Backup current identity is inconsistent."
+                )
+            if identity_history_versions.get(key, []) != list(
+                range(1, version)
+            ):
+                raise BackupValidationError(
+                    "Backup identity history is inconsistent."
+                )
+        for row in identity_current_rows:
+            _check_utf8(row)
+        for row in identity_history_rows:
+            _check_utf8(row)
+
     return _Snapshot(
         schema_versions=schema_versions,
         memory_rows=memory_rows,
         current_fact_rows=current_fact_rows,
         history_rows=history_rows,
+        identity_current_rows=identity_current_rows,
+        identity_history_rows=identity_history_rows,
     )
 
 

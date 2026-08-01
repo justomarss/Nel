@@ -10,6 +10,11 @@ from src.persistence.migration import (
     MigrationResult,
     migrate_json_to_sqlite,
 )
+from src.persistence.identity_migration import (
+    IDENTITY_SCHEMA_VERSION,
+    IdentityMigrationError,
+    migrate_identity_schema_v1_to_v2,
+)
 from src.persistence.repositories import SQLiteKnowledge, SQLiteMemory
 from src.persistence.sqlite import (
     SCHEMA_VERSION,
@@ -25,11 +30,14 @@ __all__ = [
     "BackupValidationError",
     "MigrationError",
     "MigrationResult",
+    "IDENTITY_SCHEMA_VERSION",
+    "IdentityMigrationError",
     "SQLiteDatabase",
     "SQLiteKnowledge",
     "SQLiteMemory",
     "UnsupportedSchemaVersion",
     "backup_sqlite_database",
     "migrate_json_to_sqlite",
+    "migrate_identity_schema_v1_to_v2",
     "verify_sqlite_backup",
 ]
