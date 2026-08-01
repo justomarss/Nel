@@ -15,6 +15,13 @@ from src.goals.models import (
     ProgressVerification,
 )
 from src.goals.policy import GoalPolicy, GoalPolicyError
+from src.goals.repository import (
+    GoalNotFoundError,
+    GoalRepository,
+    GoalRepositoryError,
+    GoalVersionConflict,
+)
+from src.goals.service import GoalService
 
 
 __all__ = [
@@ -23,11 +30,16 @@ __all__ = [
     "GoalOwner",
     "GoalPolicy",
     "GoalPolicyError",
+    "GoalNotFoundError",
+    "GoalRepository",
+    "GoalRepositoryError",
+    "GoalService",
     "GoalPriority",
     "GoalRevision",
     "GoalSnapshot",
     "GoalSourceKind",
     "GoalState",
+    "GoalVersionConflict",
     "MAX_CURRENT_GOALS",
     "MAX_SERIALIZED_CHARACTERS",
     "MAX_TERMINAL_GOALS",

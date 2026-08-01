@@ -179,10 +179,12 @@ class GoalSnapshot:
 class GoalRevision:
     snapshot: GoalSnapshot
     superseded_at: str
-    revision_reason: str
+    revision_reason: str | None
 
     def __post_init__(self):
         if not isinstance(self.snapshot, GoalSnapshot):
             raise ValueError("snapshot must be a GoalSnapshot.")
         _validate_timestamp(self.superseded_at, "superseded_at")
-        _require_text(self.revision_reason, "revision_reason")
+        _validate_optional_text(self.revision_reason, "revision_reason")
+        if self.revision_reason != self.snapshot.revision_reason:
+            raise ValueError("Revision reason must match the historical snapshot.")

@@ -63,7 +63,7 @@ class GoalModelTests(unittest.TestCase):
         revision = GoalRevision(
             snapshot=current,
             superseded_at=NOW,
-            revision_reason="Owner-approved revision",
+            revision_reason=current.revision_reason,
         )
 
         with self.assertRaises(FrozenInstanceError):
@@ -112,7 +112,7 @@ class GoalModelTests(unittest.TestCase):
         revision = GoalRevision(
             snapshot=old,
             superseded_at=NOW,
-            revision_reason="Resumed by user",
+            revision_reason=old.revision_reason,
         )
         self.assertEqual(revision.snapshot, old)
         self.assertEqual(revision.snapshot.version, 2)

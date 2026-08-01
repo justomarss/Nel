@@ -165,6 +165,86 @@ class GoalPolicy:
                 "Verified progress requires owner confirmation or deterministic evidence."
             )
 
+    def validate_update(
+        self,
+        current: GoalSnapshot,
+        proposed: GoalSnapshot,
+        *,
+        source_kind: str,
+        explicit_user_approval: bool,
+        approval_reference: str,
+        revision_reason: str,
+        expected_version: int,
+        success_condition_accepted: bool = False,
+        owner_confirmation: bool = False,
+        deterministic_evidence: bool = False,
+        controlled_experiment: bool = False,
+    ) -> None:
+        if not isinstance(current, GoalSnapshot) or not isinstance(
+            proposed,
+            GoalSnapshot,
+        ):
+            raise GoalPolicyError("Current and proposed goal snapshots are required.")
+        self._require_nonterminal(current)
+        self._validate_revision_metadata(
+            current,
+            proposed,
+            expected_version=expected_version,
+            revision_reason=revision_reason,
+        )
+        self._require_approval(
+            source_kind,
+            explicit_user_approval,
+            approval_reference,
+            owner=proposed.owner,
+            controlled_experiment=controlled_experiment,
+        )
+        if proposed.source_kind.value != source_kind:
+            raise GoalPolicyError("Proposed goal source does not match validation.")
+        if proposed.approval_reference != approval_reference:
+            raise GoalPolicyError("Proposed goal approval does not match validation.")
+
+        if proposed.state is not current.state:
+            if proposed.state not in ALLOWED_TRANSITIONS[current.state]:
+                raise GoalPolicyError("Goal state transition is not allowed.")
+            if (
+                proposed.state is GoalState.COMPLETED
+                and not success_condition_accepted
+            ):
+                raise GoalPolicyError(
+                    "Completion requires explicit success-condition acceptance."
+                )
+
+        progress_changed = (
+            proposed.progress_verification != current.progress_verification
+            or proposed.progress_summary != current.progress_summary
+            or proposed.progress_percent != current.progress_percent
+        )
+        if progress_changed:
+            if (
+                proposed.progress_verification
+                not in PROGRESS_TRANSITIONS[current.progress_verification]
+            ):
+                raise GoalPolicyError(
+                    "Progress verification cannot be downgraded."
+                )
+            if (
+                proposed.progress_verification
+                is ProgressVerification.USER_REPORTED
+                and not owner_confirmation
+            ):
+                raise GoalPolicyError(
+                    "User-reported progress requires an explicit user report."
+                )
+            if (
+                proposed.progress_verification is ProgressVerification.VERIFIED
+                and not owner_confirmation
+                and not deterministic_evidence
+            ):
+                raise GoalPolicyError(
+                    "Verified progress requires owner confirmation or deterministic evidence."
+                )
+
     def validate_reopen(
         self,
         current: GoalSnapshot,
@@ -244,6 +324,31 @@ class GoalPolicy:
             or expected_version != current.version
         ):
             raise GoalPolicyError("Expected goal version does not match.")
+
+    @staticmethod
+    def _validate_revision_metadata(
+        current: GoalSnapshot,
+        proposed: GoalSnapshot,
+        *,
+        expected_version: int,
+        revision_reason: str,
+    ) -> None:
+        if proposed.goal_id != current.goal_id:
+            raise GoalPolicyError("Goal ID cannot change.")
+        if proposed.created_at != current.created_at:
+            raise GoalPolicyError("Goal creation timestamp cannot change.")
+        if (
+            isinstance(expected_version, bool)
+            or not isinstance(expected_version, int)
+            or expected_version != current.version
+        ):
+            raise GoalPolicyError("Expected goal version does not match.")
+        if proposed.version != current.version + 1:
+            raise GoalPolicyError("Proposed goal version is invalid.")
+        if not isinstance(revision_reason, str) or not revision_reason.strip():
+            raise GoalPolicyError("Goal update requires a revision reason.")
+        if proposed.revision_reason != revision_reason:
+            raise GoalPolicyError("Proposed revision reason does not match.")
 
     @staticmethod
     def _require_nonterminal(current: GoalSnapshot) -> None:

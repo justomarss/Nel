@@ -11,7 +11,15 @@ from src.persistence.identity_migration import (
     IDENTITY_SCHEMA_VERSION,
     IDENTITY_TABLES,
 )
-from src.persistence.sqlite import SCHEMA_VERSION
+from src.persistence.sqlite import (
+    GOAL_EXPECTED_COLUMNS,
+    GOAL_INDEX_DEFINITIONS,
+    GOAL_SCHEMA_VERSION,
+    GOAL_TABLE_DEFINITIONS,
+    GOAL_TABLES,
+    SCHEMA_VERSION,
+    _normalize_schema_sql,
+)
 
 
 V1_TABLES = {
@@ -46,6 +54,8 @@ class _Snapshot:
     history_rows: tuple[tuple, ...]
     identity_current_rows: tuple[tuple, ...] = ()
     identity_history_rows: tuple[tuple, ...] = ()
+    goal_current_rows: tuple[tuple, ...] = ()
+    goal_history_rows: tuple[tuple, ...] = ()
 
 
 def _utc_now() -> str:
@@ -99,6 +109,8 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
         expected_tables = V1_TABLES
     elif schema_versions == (IDENTITY_SCHEMA_VERSION,):
         expected_tables = V1_TABLES | IDENTITY_TABLES
+    elif schema_versions == (GOAL_SCHEMA_VERSION,):
+        expected_tables = V1_TABLES | IDENTITY_TABLES | GOAL_TABLES
     else:
         raise BackupValidationError("Backup schema version is incompatible.")
 
@@ -151,7 +163,11 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
     )
     identity_current_rows = ()
     identity_history_rows = ()
-    if schema_versions == (IDENTITY_SCHEMA_VERSION,):
+    has_identity = schema_versions in {
+        (IDENTITY_SCHEMA_VERSION,),
+        (GOAL_SCHEMA_VERSION,),
+    }
+    if has_identity:
         identity_current_rows = tuple(
             tuple(row)
             for row in connection.execute(
@@ -215,7 +231,7 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
     for row in history_rows:
         _check_utf8(row)
 
-    if schema_versions == (IDENTITY_SCHEMA_VERSION,):
+    if has_identity:
         core = {
             row[0]: row[2]
             for row in identity_current_rows
@@ -254,6 +270,144 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
         for row in identity_history_rows:
             _check_utf8(row)
 
+    goal_current_rows = ()
+    goal_history_rows = ()
+    if schema_versions == (GOAL_SCHEMA_VERSION,):
+        table_metadata = {
+            row["name"]: row
+            for row in connection.execute("PRAGMA table_list")
+            if row["name"] in GOAL_EXPECTED_COLUMNS
+        }
+        for table, expected_columns in GOAL_EXPECTED_COLUMNS.items():
+            metadata = table_metadata.get(table)
+            if metadata is None or metadata["strict"] != 1:
+                raise BackupValidationError(
+                    "Backup goal schema is incompatible."
+                )
+
+        goal_table_sql = {
+            row["name"]: row["sql"]
+            for row in connection.execute(
+                "SELECT name, sql FROM sqlite_schema "
+                "WHERE type = 'table' AND name IN "
+                "('goals_current', 'goals_history')"
+            )
+        }
+        for name, expected_sql in GOAL_TABLE_DEFINITIONS.items():
+            sql = goal_table_sql.get(name)
+            if (
+                sql is None
+                or _normalize_schema_sql(sql)
+                != _normalize_schema_sql(expected_sql)
+            ):
+                raise BackupValidationError(
+                    "Backup goal schema is incompatible."
+                )
+            columns = tuple(
+                (
+                    row["name"],
+                    row["type"],
+                    row["notnull"],
+                    row["pk"],
+                )
+                for row in connection.execute(f"PRAGMA table_info({table})")
+            )
+            if columns != expected_columns:
+                raise BackupValidationError(
+                    "Backup goal schema is incompatible."
+                )
+
+        indexes = {
+            row["name"]: (row["tbl_name"], row["sql"])
+            for row in connection.execute(
+                "SELECT name, tbl_name, sql FROM sqlite_schema "
+                "WHERE type = 'index' AND name NOT LIKE 'sqlite_%'"
+            )
+        }
+        if set(indexes) != set(GOAL_INDEX_DEFINITIONS):
+            raise BackupValidationError("Backup goal index is incompatible.")
+        for name, (expected_table, expected_sql) in (
+            GOAL_INDEX_DEFINITIONS.items()
+        ):
+            table, sql = indexes[name]
+            if (
+                table != expected_table
+                or sql is None
+                or _normalize_schema_sql(sql)
+                != _normalize_schema_sql(expected_sql)
+            ):
+                raise BackupValidationError(
+                    "Backup goal index is incompatible."
+                )
+
+        goal_current_rows = tuple(
+            tuple(row)
+            for row in connection.execute(
+                """
+                SELECT goal_id, title, description, success_condition,
+                       owner, state, priority, deadline, progress_summary,
+                       progress_percentage, progress_verification,
+                       source_kind, source_reference, approval_reference,
+                       revision_reason, version, created_at, updated_at
+                FROM goals_current
+                ORDER BY goal_id
+                """
+            )
+        )
+        goal_history_rows = tuple(
+            tuple(row)
+            for row in connection.execute(
+                """
+                SELECT goal_id, title, description, success_condition,
+                       owner, state, priority, deadline, progress_summary,
+                       progress_percentage, progress_verification,
+                       source_kind, source_reference, approval_reference,
+                       revision_reason, version, created_at, updated_at,
+                       superseded_at
+                FROM goals_history
+                ORDER BY goal_id, version
+                """
+            )
+        )
+        goal_counts = tuple(
+            connection.execute(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM goals_current),
+                    (SELECT COUNT(*) FROM goals_history)
+                """
+            ).fetchone()
+        )
+        if goal_counts != (
+            len(goal_current_rows),
+            len(goal_history_rows),
+        ):
+            raise BackupValidationError(
+                "Backup goal row-count validation failed."
+            )
+
+        current_goal_versions = {
+            row[0]: row[15] for row in goal_current_rows
+        }
+        goal_history_versions = {}
+        for row in goal_history_rows:
+            goal_history_versions.setdefault(row[0], []).append(row[15])
+        if set(goal_history_versions) - set(current_goal_versions):
+            raise BackupValidationError(
+                "Backup goal history is inconsistent."
+            )
+        for goal_id, version in current_goal_versions.items():
+            if version < 1 or goal_history_versions.get(goal_id, []) != list(
+                range(1, version)
+            ):
+                raise BackupValidationError(
+                    "Backup goal history is inconsistent."
+                )
+        for row in goal_current_rows:
+            _check_utf8(row)
+        for row in goal_history_rows:
+            _check_utf8(row)
+
     return _Snapshot(
         schema_versions=schema_versions,
         memory_rows=memory_rows,
@@ -261,6 +415,8 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
         history_rows=history_rows,
         identity_current_rows=identity_current_rows,
         identity_history_rows=identity_history_rows,
+        goal_current_rows=goal_current_rows,
+        goal_history_rows=goal_history_rows,
     )
 
 
