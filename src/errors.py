@@ -8,3 +8,7 @@ class ProviderError(NelError):
 
 class ApplicationError(NelError):
     pass
+
+
+class PersistenceStartupError(NelError):
+    pass

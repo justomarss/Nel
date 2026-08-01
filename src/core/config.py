@@ -1,5 +1,7 @@
 from dotenv import load_dotenv
 import os
+from dataclasses import dataclass
+from pathlib import Path
 
 load_dotenv()
 
@@ -39,6 +41,35 @@ def _bool_env(name: str, default: bool) -> bool:
         return False
     raise RuntimeError(
         f"Environment variable {name} must be a boolean."
+    )
+
+
+@dataclass(frozen=True)
+class PersistenceConfig:
+    backend: str
+    database_path: Path | None
+
+
+def load_persistence_config(environ=None) -> PersistenceConfig:
+    values = os.environ if environ is None else environ
+    backend = values.get("NEL_PERSISTENCE_BACKEND", "json").strip().casefold()
+    if backend not in {"json", "sqlite"}:
+        raise ValueError(
+            "NEL_PERSISTENCE_BACKEND must be json or sqlite."
+        )
+
+    if backend == "json":
+        return PersistenceConfig(backend="json", database_path=None)
+
+    raw_path = values.get("NEL_DATABASE_PATH", "").strip()
+    if not raw_path:
+        raise ValueError(
+            "NEL_DATABASE_PATH is required for SQLite persistence."
+        )
+
+    return PersistenceConfig(
+        backend="sqlite",
+        database_path=Path(raw_path),
     )
 
 

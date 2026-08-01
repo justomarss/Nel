@@ -1,7 +1,8 @@
 import sys
 
 from src.core.nel import Nel
-from src.errors import ApplicationError
+from src.core.runtime import create_runtime_nel
+from src.errors import ApplicationError, PersistenceStartupError
 
 
 for stream in (sys.stdout, sys.stderr):
@@ -11,9 +12,15 @@ for stream in (sys.stdout, sys.stderr):
 
 
 def run():
-    nel = Nel()
+    nel = None
 
     try:
+        try:
+            nel = create_runtime_nel(nel_factory=Nel)
+        except PersistenceStartupError as exc:
+            print(f"Nel: {exc}", file=sys.stderr)
+            return 1
+
         while True:
             text = input("Sən: ")
 
@@ -30,8 +37,11 @@ def run():
             except ApplicationError as exc:
                 print(f"Nel: {exc}")
     finally:
-        nel.stop()
+        if nel is not None:
+            nel.stop()
+
+    return 0
 
 
 if __name__ == "__main__":
-    run()
+    raise SystemExit(run())

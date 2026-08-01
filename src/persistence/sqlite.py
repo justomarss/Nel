@@ -5,6 +5,38 @@ from pathlib import Path
 
 
 SCHEMA_VERSION = 1
+EXPECTED_TABLES = {
+    "schema_version",
+    "memory_events",
+    "user_facts_current",
+    "user_fact_history",
+}
+EXPECTED_COLUMNS = {
+    "schema_version": (
+        ("version", "INTEGER", 0, 1),
+        ("applied_at", "TEXT", 1, 0),
+    ),
+    "memory_events": (
+        ("id", "INTEGER", 0, 1),
+        ("content", "TEXT", 1, 0),
+        ("stored_at", "TEXT", 1, 0),
+        ("source_id", "TEXT", 0, 0),
+    ),
+    "user_facts_current": (
+        ("fact_key", "TEXT", 1, 1),
+        ("value", "TEXT", 1, 0),
+        ("version", "INTEGER", 1, 0),
+        ("updated_at", "TEXT", 1, 0),
+    ),
+    "user_fact_history": (
+        ("id", "INTEGER", 0, 1),
+        ("fact_key", "TEXT", 1, 0),
+        ("value", "TEXT", 1, 0),
+        ("version", "INTEGER", 1, 0),
+        ("valid_from", "TEXT", 1, 0),
+        ("superseded_at", "TEXT", 1, 0),
+    ),
+}
 
 
 def _utc_now() -> str:
@@ -53,15 +85,30 @@ SCHEMA_STATEMENTS = (
 
 
 class SQLiteDatabase:
-    def __init__(self, path: str | Path, timeout: float = 5.0):
+    def __init__(
+        self,
+        path: str | Path,
+        timeout: float = 5.0,
+        require_existing: bool = False,
+    ):
         self.path = Path(path)
         self.timeout = timeout
+        self.require_existing = require_existing
 
     def connect(self) -> sqlite3.Connection:
+        target = self.path
+        uri = False
+        if self.require_existing:
+            if not self.path.is_file():
+                raise FileNotFoundError("SQLite database does not exist.")
+            target = f"{self.path.resolve().as_uri()}?mode=rw"
+            uri = True
+
         connection = sqlite3.connect(
-            self.path,
+            target,
             timeout=self.timeout,
             isolation_level=None,
+            uri=uri,
         )
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
@@ -113,5 +160,66 @@ class SQLiteDatabase:
                 "SELECT MAX(version) AS version FROM schema_version"
             ).fetchone()
             return row["version"]
+        finally:
+            connection.close()
+
+    def validate_existing(self) -> None:
+        if not self.require_existing:
+            raise RuntimeError(
+                "Existing-database validation requires guarded mode."
+            )
+
+        connection = self.connect()
+        try:
+            integrity = [
+                row[0]
+                for row in connection.execute("PRAGMA integrity_check")
+            ]
+            if integrity != ["ok"]:
+                raise RuntimeError("SQLite integrity validation failed.")
+
+            tables = {
+                row["name"]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+                )
+            }
+            if tables != EXPECTED_TABLES:
+                raise RuntimeError("SQLite schema is not initialized.")
+
+            table_metadata = {
+                row["name"]: row
+                for row in connection.execute("PRAGMA table_list")
+                if row["name"] in EXPECTED_TABLES
+            }
+            for table, expected_columns in EXPECTED_COLUMNS.items():
+                if table_metadata[table]["strict"] != 1:
+                    raise RuntimeError("SQLite schema is incompatible.")
+
+                columns = tuple(
+                    (
+                        row["name"],
+                        row["type"],
+                        row["notnull"],
+                        row["pk"],
+                    )
+                    for row in connection.execute(
+                        f"PRAGMA table_info({table})"
+                    )
+                )
+                if columns != expected_columns:
+                    raise RuntimeError("SQLite schema is incompatible.")
+
+            versions = [
+                row["version"]
+                for row in connection.execute(
+                    "SELECT version FROM schema_version ORDER BY version"
+                )
+            ]
+            if versions != [SCHEMA_VERSION]:
+                raise UnsupportedSchemaVersion(
+                    "Unsupported SQLite schema version."
+                )
         finally:
             connection.close()
