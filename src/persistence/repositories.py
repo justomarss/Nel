@@ -1,20 +1,12 @@
-import re
-import unicodedata
 from collections.abc import Mapping
 from datetime import datetime, timezone
 
+from src.persistence.normalization import normalize_fact_key
 from src.persistence.sqlite import SQLiteDatabase
 
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _normalize_fact_key(key: str) -> str:
-    normalized = unicodedata.normalize("NFKC", key).strip().casefold()
-    normalized = re.sub(r"[^\w]+", "_", normalized)
-    normalized = re.sub(r"_+", "_", normalized).strip("_")
-    return normalized
 
 
 def _validate_fact_batch(facts) -> list[tuple[str, str]]:
@@ -38,7 +30,7 @@ def _validate_fact_batch(facts) -> list[tuple[str, str]]:
         if not isinstance(key, str) or not key.strip():
             raise ValueError("Fact key must be a non-empty string.")
 
-        normalized_key = _normalize_fact_key(key)
+        normalized_key = normalize_fact_key(key)
         if not normalized_key:
             raise ValueError("Fact key is empty after normalization.")
 
