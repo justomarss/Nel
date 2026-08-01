@@ -1,3 +1,10 @@
+from src.persistence.backup import (
+    BackupError,
+    BackupResult,
+    BackupValidationError,
+    backup_sqlite_database,
+    verify_sqlite_backup,
+)
 from src.persistence.migration import (
     MigrationError,
     MigrationResult,
@@ -13,11 +20,16 @@ from src.persistence.sqlite import (
 
 __all__ = [
     "SCHEMA_VERSION",
+    "BackupError",
+    "BackupResult",
+    "BackupValidationError",
     "MigrationError",
     "MigrationResult",
     "SQLiteDatabase",
     "SQLiteKnowledge",
     "SQLiteMemory",
     "UnsupportedSchemaVersion",
+    "backup_sqlite_database",
     "migrate_json_to_sqlite",
+    "verify_sqlite_backup",
 ]
