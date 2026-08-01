@@ -1,4 +1,6 @@
+.env
+.venv/
 __pycache__/
 *.pyc
-.venv/
-memory/internal_thoughts.json
+memory/*.json
+logs/
