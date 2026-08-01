@@ -43,8 +43,14 @@ yet meet the first-stable criteria.
   second-person answers while Nel-owned identity remains first-person.
 - Runtime Memory and Knowledge use one shared, guarded SQLite database at
   `memory/nel.sqlite3` by default.
-- Startup requires an existing integrity-checked schema-version-1 database
-  and never silently creates an empty production database.
+- Runtime code requires an existing integrity-checked schema-version-2
+  database with the six approved persistence tables and identity immutability
+  triggers. It never migrates or creates a production database at startup.
+- Identity v1 storage and runtime composition are implemented. Production is
+  still schema version 1 pending the controlled offline migration, so the
+  production CLI is intentionally blocked until that migration is completed.
+- Runtime Memory, Knowledge, and Identity services share one guarded database;
+  identity remains namespace-separated and is not included in prompts.
 - Current user facts are stored directly, changed values retain recoverable
   history, and validated extraction batches are transactional.
 - The verified JSON-to-SQLite cutover is complete. JSON files and the initial
@@ -72,7 +78,7 @@ yet meet the first-stable criteria.
 | Memory | Raw long-term strings; only a bounded newest subset is sent, without relevance scoring |
 | Knowledge | Current values and superseded history are transactional; provenance beyond version history is not implemented |
 | Intent classification | Keyword rules; narrow and not robustly tested |
-| State | In-memory enum; no persistent Nel identity or preferences |
+| State | Operational state is an in-memory enum; persistent Nel identity is stored separately and is not yet prompt-integrated |
 | Thoughts | Generation code remains wired but automatic generation is disabled by default |
 | Goals | JSON helper exists but is not connected to active Nel |
 | Clock | Lifecycle is owned, but an active provider callback cannot be cancelled early |
@@ -83,7 +89,7 @@ yet meet the first-stable criteria.
 
 ## Not Implemented
 
-- persistent Nel-owned identity and preference storage;
+- automatic Nel preference learning and identity prompt integration;
 - semantic retrieval evaluation;
 - configuration-driven provider selection;
 - safe long-running runtime lifecycle;
@@ -94,7 +100,7 @@ yet meet the first-stable criteria.
 
 ## Tests
 
-The repository has 87 `unittest` cases covering:
+The repository has 102 assertion-based `unittest` cases covering:
 
 - user favorite update from an older to newer value;
 - literal value preservation for different fact domains;
@@ -113,6 +119,8 @@ The repository has 87 `unittest` cases covering:
 - migration idempotency, rollback, backup, restore, and cutover cleanup;
 - JSON snapshot immutability and absence of runtime dual writes;
 - generic Azerbaijani user/Nel perspective ownership.
+- schema-v2 identity migration, immutability, history, backup, and runtime
+  composition without production database writes.
 
 `tests/test_event.py` is a print-based EventBus smoke script, not an
 assertion-based test.
@@ -167,8 +175,6 @@ documents remain present but are non-normative until reconciled.
 
 - The target requires relevant retrieval; current prompts use a bounded newest
   subset without relevance scoring.
-- The target separates user and Nel identity; Nel-owned persistent storage
-  does not exist.
 - The target is provider-independent; construction currently hardcodes NIM.
 
 ## Provisional Baseline Choices

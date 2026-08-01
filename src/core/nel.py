@@ -38,6 +38,7 @@ class Nel:
         provider=None,
         memory_repository=None,
         knowledge_repository=None,
+        identity_service=None,
     ):
         if memory_repository is None or knowledge_repository is None:
             raise ValueError(
@@ -54,6 +55,7 @@ class Nel:
 
         self.brain = Brain(provider)
         self.memory = memory_repository
+        self.identity = identity_service
         self.state = StateManager()
         self.decision = DecisionEngine()
         self.intent = IntentClassifier()

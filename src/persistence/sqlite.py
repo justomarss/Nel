@@ -5,13 +5,47 @@ from pathlib import Path
 
 
 SCHEMA_VERSION = 1
-EXPECTED_TABLES = {
+ACTIVE_SCHEMA_VERSION = 2
+V1_EXPECTED_TABLES = {
     "schema_version",
     "memory_events",
     "user_facts_current",
     "user_fact_history",
 }
-EXPECTED_COLUMNS = {
+IDENTITY_TABLES = {
+    "nel_identity_current",
+    "nel_identity_history",
+}
+EXPECTED_TABLES = V1_EXPECTED_TABLES | IDENTITY_TABLES
+IDENTITY_TRIGGERS = {
+    "nel_identity_core_no_update",
+    "nel_identity_core_no_delete",
+}
+IDENTITY_TRIGGER_DEFINITIONS = {
+    "nel_identity_core_no_update": (
+        "nel_identity_current",
+        """
+        CREATE TRIGGER nel_identity_core_no_update
+        BEFORE UPDATE ON nel_identity_current
+        WHEN OLD.immutable = 1
+        BEGIN
+            SELECT RAISE(ABORT, 'immutable identity record');
+        END
+        """,
+    ),
+    "nel_identity_core_no_delete": (
+        "nel_identity_current",
+        """
+        CREATE TRIGGER nel_identity_core_no_delete
+        BEFORE DELETE ON nel_identity_current
+        WHEN OLD.immutable = 1
+        BEGIN
+            SELECT RAISE(ABORT, 'immutable identity record');
+        END
+        """,
+    ),
+}
+V1_EXPECTED_COLUMNS = {
     "schema_version": (
         ("version", "INTEGER", 0, 1),
         ("applied_at", "TEXT", 1, 0),
@@ -37,10 +71,41 @@ EXPECTED_COLUMNS = {
         ("superseded_at", "TEXT", 1, 0),
     ),
 }
+IDENTITY_EXPECTED_COLUMNS = {
+    "nel_identity_current": (
+        ("identity_key", "TEXT", 1, 1),
+        ("record_type", "TEXT", 1, 0),
+        ("value", "TEXT", 1, 0),
+        ("preference_state", "TEXT", 0, 0),
+        ("immutable", "INTEGER", 1, 0),
+        ("source_kind", "TEXT", 1, 0),
+        ("source_reference", "TEXT", 1, 0),
+        ("version", "INTEGER", 1, 0),
+        ("updated_at", "TEXT", 1, 0),
+    ),
+    "nel_identity_history": (
+        ("id", "INTEGER", 0, 1),
+        ("identity_key", "TEXT", 1, 0),
+        ("record_type", "TEXT", 1, 0),
+        ("value", "TEXT", 1, 0),
+        ("preference_state", "TEXT", 0, 0),
+        ("immutable", "INTEGER", 1, 0),
+        ("source_kind", "TEXT", 1, 0),
+        ("source_reference", "TEXT", 1, 0),
+        ("version", "INTEGER", 1, 0),
+        ("valid_from", "TEXT", 1, 0),
+        ("superseded_at", "TEXT", 1, 0),
+    ),
+}
+EXPECTED_COLUMNS = V1_EXPECTED_COLUMNS | IDENTITY_EXPECTED_COLUMNS
 
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _normalize_schema_sql(value: str) -> str:
+    return " ".join(value.split()).casefold()
 
 
 class UnsupportedSchemaVersion(RuntimeError):
@@ -163,10 +228,26 @@ class SQLiteDatabase:
         finally:
             connection.close()
 
-    def validate_existing(self) -> None:
+    def validate_existing(
+        self,
+        expected_version: int = ACTIVE_SCHEMA_VERSION,
+    ) -> None:
         if not self.require_existing:
             raise RuntimeError(
                 "Existing-database validation requires guarded mode."
+            )
+
+        if expected_version == SCHEMA_VERSION:
+            expected_tables = V1_EXPECTED_TABLES
+            expected_columns = V1_EXPECTED_COLUMNS
+            expected_triggers = set()
+        elif expected_version == ACTIVE_SCHEMA_VERSION:
+            expected_tables = EXPECTED_TABLES
+            expected_columns = EXPECTED_COLUMNS
+            expected_triggers = IDENTITY_TRIGGERS
+        else:
+            raise UnsupportedSchemaVersion(
+                "Unsupported SQLite schema version."
             )
 
         connection = self.connect()
@@ -185,15 +266,15 @@ class SQLiteDatabase:
                     "WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
                 )
             }
-            if tables != EXPECTED_TABLES:
+            if tables != expected_tables:
                 raise RuntimeError("SQLite schema is not initialized.")
 
             table_metadata = {
                 row["name"]: row
                 for row in connection.execute("PRAGMA table_list")
-                if row["name"] in EXPECTED_TABLES
+                if row["name"] in expected_tables
             }
-            for table, expected_columns in EXPECTED_COLUMNS.items():
+            for table, columns_expected in expected_columns.items():
                 if table_metadata[table]["strict"] != 1:
                     raise RuntimeError("SQLite schema is incompatible.")
 
@@ -208,7 +289,29 @@ class SQLiteDatabase:
                         f"PRAGMA table_info({table})"
                     )
                 )
-                if columns != expected_columns:
+                if columns != columns_expected:
+                    raise RuntimeError("SQLite schema is incompatible.")
+
+            triggers = {
+                row["name"]: (row["tbl_name"], row["sql"])
+                for row in connection.execute(
+                    "SELECT name, tbl_name, sql FROM sqlite_schema "
+                    "WHERE type = 'trigger'"
+                )
+            }
+            if set(triggers) != expected_triggers:
+                raise RuntimeError("SQLite schema is incompatible.")
+            for name in expected_triggers:
+                expected_table, expected_sql = IDENTITY_TRIGGER_DEFINITIONS[
+                    name
+                ]
+                table, sql = triggers[name]
+                if (
+                    table != expected_table
+                    or sql is None
+                    or _normalize_schema_sql(sql)
+                    != _normalize_schema_sql(expected_sql)
+                ):
                     raise RuntimeError("SQLite schema is incompatible.")
 
             versions = [
@@ -217,7 +320,7 @@ class SQLiteDatabase:
                     "SELECT version FROM schema_version ORDER BY version"
                 )
             ]
-            if versions != [SCHEMA_VERSION]:
+            if versions != [expected_version]:
                 raise UnsupportedSchemaVersion(
                     "Unsupported SQLite schema version."
                 )

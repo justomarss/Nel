@@ -97,7 +97,9 @@ def _connect_read_only(path: Path) -> sqlite3.Connection:
 def verify_database(database_path: str | Path) -> VerificationResult:
     path = Path(database_path)
     try:
-        SQLiteDatabase(path, require_existing=True).validate_existing()
+        SQLiteDatabase(path, require_existing=True).validate_existing(
+            expected_version=SCHEMA_VERSION,
+        )
         connection = _connect_read_only(path)
         try:
             memory_rows = [
