@@ -37,22 +37,33 @@ class Nel:
         self,
         raw_memory_context_limit=RAW_MEMORY_CONTEXT_LIMIT,
         enable_background_thoughts=ENABLE_BACKGROUND_THOUGHTS,
+        provider=None,
+        memory_repository=None,
+        knowledge_repository=None,
     ):
-        provider = NvidiaNimProvider(
-            model=NVIDIA_MODEL,
-            api_key=NVIDIA_API_KEY,
-            base_url=NVIDIA_BASE_URL,
-            timeout=NVIDIA_INTERACTIVE_TIMEOUT_SECONDS,
-        )
+        if provider is None:
+            provider = NvidiaNimProvider(
+                model=NVIDIA_MODEL,
+                api_key=NVIDIA_API_KEY,
+                base_url=NVIDIA_BASE_URL,
+                timeout=NVIDIA_INTERACTIVE_TIMEOUT_SECONDS,
+            )
 
         self.brain = Brain(provider)
-        self.memory = Memory()
+        self.memory = (
+            memory_repository
+            if memory_repository is not None
+            else Memory()
+        )
         self.state = StateManager()
         self.decision = DecisionEngine()
         self.intent = IntentClassifier()
 
         self.thought_service = ThoughtService(self.brain)
-        self.knowledge = KnowledgeService(self.brain)
+        self.knowledge = KnowledgeService(
+            self.brain,
+            repository=knowledge_repository,
+        )
         self.raw_memory_context_limit = raw_memory_context_limit
         self.background_thoughts_enabled = enable_background_thoughts
         self._thought_lock = threading.Lock()
