@@ -144,6 +144,39 @@ class IdentityContextTests(unittest.TestCase):
             self.assertTrue(context["role"])
             self.assertEqual(response, "Mən Neləm, süni rəqəmsal yoldaşam.")
 
+    def test_role_uses_natural_azerbaijani_first_person_predicate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _path, database = self._database(directory)
+
+            def respond(prompt):
+                context = identity_context(prompt)
+                required_rules = (
+                    "natural first-person predicate agreement",
+                    "Express the role directly as what Nel is",
+                )
+                if context["role"] and all(
+                    rule in prompt for rule in required_rules
+                ):
+                    return "Mən Ömərin davamlı rəqəmsal yoldaşıyam."
+                return "Mənim rolum Ömərin davamlı rəqəmsal yoldaşımdır."
+
+            provider = PromptProvider(respond)
+            nel = self._nel(database, provider)
+            try:
+                response = nel.think("Sən kimsən?")
+            finally:
+                nel.stop()
+
+            self.assertEqual(
+                response,
+                "Mən Ömərin davamlı rəqəmsal yoldaşıyam.",
+            )
+            self.assertNotIn(response, provider.prompt)
+            self.assertNotIn(
+                "Mənim rolum Ömərin davamlı rəqəmsal yoldaşımdır.",
+                provider.prompt,
+            )
+
     def test_user_facts_and_identity_do_not_cross_namespaces(self):
         with tempfile.TemporaryDirectory() as directory:
             _path, database = self._database(directory)
