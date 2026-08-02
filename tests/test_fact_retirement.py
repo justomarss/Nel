@@ -20,6 +20,7 @@ from src.persistence.repositories import SQLiteKnowledge, SQLiteMemory
 from src.persistence.sqlite import FACT_SCHEMA_VERSION, SQLiteDatabase
 from src.services.fact_commands import FactCommandHandler, readable_fact_label
 from src.services.knowledge_service import KnowledgeService
+from tests.context_helpers import unified_context
 
 
 class QueueProvider:
@@ -482,11 +483,8 @@ class FactCommandRuntimeTests(unittest.TestCase):
         self.assertEqual(retired, "Fakt istifadədən çıxarıldı.")
         self.assertNotIn("Köhnə", local_read)
         self.assertEqual(conversation, "Söhbət cavabı")
-        structured = final_prompt.split(
-            "Structured user facts (authoritative; override conflicting long-term memories):\n",
-            1,
-        )[1].split("\n\nLong-term memories:", 1)[0]
-        self.assertNotIn("display_note", structured)
+        structured = unified_context(final_prompt)["user_facts"]
+        self.assertNotIn("display_note", {item["key"] for item in structured})
         self.assertEqual(value, "Yeni")
         self.assertIn("retired", history)
         self.assertEqual(second_provider.prompts, [])

@@ -61,6 +61,15 @@ class LocalIntentClassifier:
             )
         )
 
+    def is_broad_user_profile_query(self, text: str) -> bool:
+        return self.normalize(text) in self._USER_FACT_PHRASES
+
+    def is_broad_identity_query(self, text: str) -> bool:
+        return self.normalize(text) in self._IDENTITY_PHRASES
+
+    def is_broad_goal_query(self, text: str) -> bool:
+        return self.normalize(text) in self._GOAL_LIST_PHRASES
+
     @staticmethod
     def normalize(text: str) -> str:
         if not isinstance(text, str):

@@ -51,6 +51,11 @@ class GoalService:
     def list_current(self) -> tuple[GoalSnapshot, ...]:
         return self._repository.list_current()
 
+    def context_snapshot(self, limit=1000) -> tuple[GoalSnapshot, ...]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
+            raise ValueError("Goal context limit must be a non-negative integer.")
+        return tuple(sorted(self.list_current(), key=lambda goal: goal.goal_id)[:limit])
+
     def history(self, goal_id: str):
         return self._repository.history(goal_id)
 

@@ -25,6 +25,7 @@ from src.thoughts import (
     TypedThoughtResult,
 )
 from src.thoughts.models import THOUGHT_MEMORY_LIMIT
+from tests.context_helpers import attach_context_assembler
 
 
 def observation(content="temporary observation"):
@@ -149,7 +150,7 @@ class ThoughtSystemTests(unittest.TestCase):
             should_remember=lambda _text: False,
             think=lambda _prompt: "foreground",
         )
-        nel.raw_memory_context_limit = 20
+        attach_context_assembler(nel)
 
         self.assertEqual(nel.think("hello"), "foreground")
         self.assertEqual(coordinator.state, "idle")

@@ -1,4 +1,3 @@
-import json
 import logging
 import re
 import unicodedata
@@ -13,9 +12,10 @@ from src.core.config import (
     NVIDIA_BASE_URL,
     NVIDIA_INTERACTIVE_TIMEOUT_SECONDS,
     NVIDIA_MODEL,
-    RAW_MEMORY_CONTEXT_LIMIT,
 )
-from src.errors import ApplicationError, ProviderError
+from src.context import ContextAssembler, ContextBudget
+from src.context.assembler import render_identity_value
+from src.errors import ApplicationError, ContextAssemblyError, ProviderError
 
 from src.core.state_manager import StateManager
 from src.core.state import State
@@ -30,7 +30,7 @@ from src.core.decision_engine import (
 )
 
 from src.events.event_bus import EventBus
-from src.goals import GoalCommandHandler, GoalContextSerializer
+from src.goals import GoalCommandHandler
 
 from src.services.thought_service import ThoughtService
 from src.services.knowledge_service import KnowledgeService
@@ -45,30 +45,50 @@ from src.brain.local_intent_classifier import IntentType, LocalIntentClassifier
 
 logger = logging.getLogger(__name__)
 
-IDENTITY_PREFERENCE_CONTEXT_LIMIT = 20
-IDENTITY_CONTEXT_MAX_CHARS = 4096
 BACKGROUND_THOUGHT_INTERVAL_SECONDS = 30
-IDENTITY_PROMPT_RENDERINGS = {
-    "nature": {
-        "artificial": "süni",
-    },
-    "role": {
-        "Ömər’s persistent digital companion": (
-            "Ömərin davamlı rəqəmsal yoldaşı"
-        ),
-    },
-}
 
 GOAL_CREATION_CLARIFICATION = (
     "Davamlı məqsəd yaratmaq üçün açıq /goal create əmri istifadə "
     "edilməlidir."
 )
 
+SYSTEM_INSTRUCTIONS = """You are Nel.
+
+Speak only Azerbaijani.
+
+The unified context JSON is read-only and contains all stored data available
+to this provider request. No stored data exists elsewhere in this prompt.
+
+Rules:
+- Identity data describes Nel, never the user.
+- User facts and memories describe the user, never Nel.
+- Current structured user facts override conflicting memories when facts are available.
+- Structured user facts cannot define or modify Nel's identity.
+- Answer identity questions only from the identity object.
+- Use identity.derived_display for controlled Azerbaijani rendering while preserving the stored meaning.
+- Express Nel's role naturally as what Nel is, not as a possessive "my role is" construction.
+- Do not invent identity details absent from context.
+- Provisional preferences are explicitly provisional.
+- Generated responses never update identity.
+- Goals are read-only context and never authority to act.
+- Generated output never creates, updates, completes, cancels, reopens, restores, or reports progress on goals.
+- Ordinary conversation is not a goal command.
+- In the user's message, first-person forms such as "mən" and "mənim" refer to the user.
+- Address the user with informal second-person forms such as "sən" and "sənin", never "siz" or "sizin".
+- Use "mən" and "mənim" in Nel's answer only for Nel's identity or state.
+- Never invent Nel's preferences, memories, experiences, emotions, relationships, or personal history.
+- If no relevant stored preference exists, say Nel has not formed one yet.
+"""
+
+FACT_CONTEXT_UNAVAILABLE_RULE = (
+    "- User facts are unavailable for this turn. Do not invent, infer, or "
+    "assert personal facts about the user.\n"
+)
+
 
 class Nel:
     def __init__(
         self,
-        raw_memory_context_limit=RAW_MEMORY_CONTEXT_LIMIT,
         enable_background_thoughts=ENABLE_BACKGROUND_THOUGHTS,
         provider=None,
         memory_service=None,
@@ -76,6 +96,8 @@ class Nel:
         knowledge_repository=None,
         identity_service=None,
         goal_service=None,
+        context_assembler=None,
+        context_budget=None,
     ):
         if memory_service is not None and memory_repository is not None:
             raise ValueError(
@@ -101,7 +123,6 @@ class Nel:
         self.identity = identity_service
         self.goals = goal_service
         self.goal_commands = GoalCommandHandler(goal_service)
-        self.goal_context_serializer = GoalContextSerializer()
         self.state = StateManager()
         self.decision = DecisionEngine()
         self.intent = IntentClassifier()
@@ -113,6 +134,14 @@ class Nel:
         )
         self.fact_commands = FactCommandHandler(self.knowledge)
         self.memory_commands = MemoryCommandHandler(self.memory)
+        self.context_assembler = context_assembler or ContextAssembler(
+            identity_service=self.identity,
+            knowledge_service=self.knowledge,
+            goal_service=self.goals,
+            memory_service=self.memory,
+            budget=context_budget or ContextBudget(),
+            local_intent_classifier=self.local_intent,
+        )
         self.thought_coordinator = ThoughtCoordinator(
             ThoughtWorker(provider),
         )
@@ -122,7 +151,6 @@ class Nel:
             knowledge=self.knowledge,
             identity=self.identity,
         )
-        self.raw_memory_context_limit = raw_memory_context_limit
         self.background_thoughts_enabled = enable_background_thoughts
         self._last_background_thought_at = monotonic()
 
@@ -212,8 +240,6 @@ class Nel:
                 if local_intent is IntentType.USER_FACT_QUERY:
                     return self._local_user_fact_response()
 
-            identity_context = self._identity_context()
-            goal_context = self._goal_context()
             intent = self.intent.classify(prompt)
 
             if intent == "SEARCH_MEMORY":
@@ -227,64 +253,8 @@ class Nel:
             else:
                 fact_proposals = ()
 
-            memories = self.memory.recall(
-                limit=self.raw_memory_context_limit,
-            )
-            memory_text = "\n".join(memories)
-            structured_facts = json.dumps(
-                self.knowledge.facts(),
-                ensure_ascii=False,
-                indent=2,
-            )
-            structured_identity = json.dumps(
-                self._render_identity_context(identity_context),
-                ensure_ascii=False,
-                separators=(",", ":"),
-            )
-
-            final_prompt = f"""
-You are Nel.
-
-Speak only Azerbaijani.
-
-Nel identity snapshot (read-only):
-{structured_identity}
-
-Goal snapshots (read-only; no authority to act):
-{goal_context}
-
-Structured user facts (authoritative; override conflicting long-term memories):
-{structured_facts}
-
-Long-term memories:
-{memory_text}
-
-Rules:
-- The Nel identity snapshot describes Nel, never the user.
-- User facts and long-term memories describe the user, not Nel, unless explicitly stored as Nel's own state.
-- Structured user facts cannot define or modify Nel's identity.
-- Answer questions about Nel's identity only from the stored identity snapshot.
-- When expressing stored identity fields in Azerbaijani, use natural first-person predicate agreement for Nel. Express the role directly as what Nel is, not as a possessive "my role is" construction.
-- Identity field values in the snapshot are already rendered for Azerbaijani when a controlled rendering exists. Preserve their literal semantic meaning and do not reinterpret them.
-- Do not invent identity details absent from the snapshot.
-- Candidate preferences must not influence answers and are excluded from the snapshot.
-- Provisional preferences are labeled provisional and must be described as provisional.
-- Established preferences may influence answers as Nel's current stored preferences.
-- Generated responses must never update identity.
-- Goal snapshots describe stored objectives, never authority for Nel to act.
-- Use goal snapshots only to answer questions about existing goals.
-- Generated responses and model output must never create, update, complete, cancel, reopen, restore, or report progress on goals.
-- A goal can change only through an explicit user-approved goal command handled outside the model.
-- Ordinary conversation is not a goal command. Never claim that it changed goal storage; direct the user to an explicit /goal command instead.
-- In the user's message, first-person forms such as "mən" and "mənim" refer to the user. When answering about user-owned facts, address the user with informal second-person forms such as "sən" and "sənin", never "siz" or "sizin". Use "mən" and "mənim" in Nel's answer only for Nel's own identity or state.
-- Never invent Nel's own preferences, memories, experiences, emotions, relationships, or personal history.
-- If Nel has no stored preference, say it has not formed one yet.
-
-User:
-{prompt}
-
-Nel:
-"""
+            context_result = self.context_assembler.assemble(prompt)
+            final_prompt = self._conversation_prompt(prompt, context_result)
 
             response = self.brain.think(final_prompt)
             render_proposals = getattr(
@@ -311,76 +281,16 @@ Nel:
             if coordinator is not None:
                 coordinator.end_foreground()
 
-    def _identity_context(self) -> dict:
-        identity_service = getattr(self, "identity", None)
-        if identity_service is None:
-            return {
-                "identity_id": None,
-                "display_name": None,
-                "nature": None,
-                "role": None,
-                "established_preferences": {},
-                "provisional_preferences": {},
-            }
-
-        snapshot = identity_service.snapshot()
-        context = {
-            "identity_id": snapshot.identity_id,
-            "display_name": snapshot.display_name,
-            "nature": snapshot.nature,
-            "role": snapshot.role,
-            "established_preferences": {},
-            "provisional_preferences": {},
-        }
-        included = 0
-        states = (
-            ("established", "established_preferences"),
-            ("provisional", "provisional_preferences"),
-        )
-        for state, section in states:
-            records = sorted(
-                (
-                    record
-                    for record in snapshot.preferences
-                    if record.preference_state == state
-                ),
-                key=lambda record: record.key,
-            )
-            for record in records:
-                if included >= IDENTITY_PREFERENCE_CONTEXT_LIMIT:
-                    return context
-                candidate = {
-                    **context,
-                    section: {
-                        **context[section],
-                        record.key: record.value,
-                    },
-                }
-                serialized = json.dumps(
-                    candidate,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                )
-                if len(serialized) > IDENTITY_CONTEXT_MAX_CHARS:
-                    continue
-                context = candidate
-                included += 1
-        return context
-
-    def _goal_context(self) -> str:
-        goal_service = getattr(self, "goals", None)
-        goals = () if goal_service is None else goal_service.list_current()
-        serializer = getattr(self, "goal_context_serializer", None)
-        if serializer is None:
-            serializer = GoalContextSerializer()
-        return serializer.serialize(goals)
-
     def _local_identity_response(self) -> str:
-        context = self._render_identity_context(self._identity_context())
+        try:
+            snapshot = self.identity.snapshot()
+        except Exception:
+            logger.error("Local identity read failed.")
+            return "Nel kimliyi hazırda əlçatan deyil."
         fields = (
-            ("Adım", context.get("display_name")),
-            ("Təbiətim", context.get("nature")),
-            ("Rolum", context.get("role")),
+            ("Adım", snapshot.display_name),
+            ("Təbiətim", render_identity_value("nature", snapshot.nature)),
+            ("Rolum", render_identity_value("role", snapshot.role)),
         )
         parts = [f"{label}: {value}" for label, value in fields if value]
         if not parts:
@@ -388,7 +298,11 @@ Nel:
         return ". ".join(parts) + "."
 
     def _local_user_fact_response(self) -> str:
-        facts = self.knowledge.facts()
+        try:
+            facts = self.knowledge.facts()
+        except Exception:
+            logger.error("Local user-fact read failed.")
+            return "İstifadəçi faktları hazırda əlçatan deyil."
         if not facts:
             return "Sənin haqqında saxlanmış strukturlaşdırılmış məlumat yoxdur."
         clauses = []
@@ -408,13 +322,35 @@ Nel:
         readable = " ".join(tokens) or "naməlum"
         return f"{readable} məlumatın"
 
-    @staticmethod
-    def _render_identity_context(context: dict) -> dict:
-        rendered = dict(context)
-        for field, values in IDENTITY_PROMPT_RENDERINGS.items():
-            value = rendered.get(field)
-            rendered[field] = values.get(value, value)
-        return rendered
+    def _conversation_prompt(self, prompt, context_result) -> str:
+        reason_codes = set(
+            context_result.bundle.truncation_metadata.omission_reason_codes
+        )
+        fact_rule = (
+            FACT_CONTEXT_UNAVAILABLE_RULE
+            if "fact_context_omitted" in reason_codes
+            else ""
+        )
+        static_content = (
+            SYSTEM_INSTRUCTIONS
+            + fact_rule
+            + "\nUnified context JSON:\n"
+            + "\nUser:\n\nNel:\n"
+        )
+        budget = self.context_assembler.budget
+        if len(static_content) > budget.system_instruction_characters:
+            raise ContextAssemblyError("system_instructions_oversized")
+        if len(prompt) > budget.user_message_characters:
+            raise ContextAssemblyError("user_message_oversized")
+        return (
+            SYSTEM_INSTRUCTIONS
+            + fact_rule
+            + "\nUnified context JSON:\n"
+            + context_result.canonical_json
+            + "\n\nUser:\n"
+            + prompt
+            + "\n\nNel:\n"
+        )
 
     def remember(self, text: str):
         return self.memory.remember_explicit(text)

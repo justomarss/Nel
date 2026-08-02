@@ -5,11 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.core.nel import (
-    IDENTITY_CONTEXT_MAX_CHARS,
-    IDENTITY_PREFERENCE_CONTEXT_LIMIT,
-    Nel,
-)
+from src.context import ContextBudget
+from src.core.nel import Nel
 from src.core.runtime import create_runtime_nel
 from src.errors import ApplicationError, ProviderError
 from src.identity import IdentityRepository, IdentityService
@@ -18,27 +15,30 @@ from src.persistence.goal_migration import migrate_goal_schema_v2_to_v3
 from src.persistence.fact_migration import migrate_fact_schema_v3_to_v4
 from src.persistence.repositories import SQLiteKnowledge, SQLiteMemory
 from src.persistence.sqlite import SQLiteDatabase
+from tests.context_helpers import unified_context
 
 
 def identity_context(prompt: str) -> dict:
-    marker = "Nel identity snapshot (read-only):\n"
-    payload = prompt.split(marker, 1)[1].split(
-        "\n\nGoal snapshots",
-        1,
-    )[0]
-    return json.loads(payload)
+    context = unified_context(prompt)["identity"]
+    rendered = dict(context)
+    rendered["nature"] = context["derived_display"]["nature"]
+    rendered["role"] = context["derived_display"]["role"]
+    rendered["established_preferences"] = {
+        item["key"]: item["value"]
+        for item in context["established_preferences"]
+    }
+    rendered["provisional_preferences"] = {
+        item["key"]: item["value"]
+        for item in context["provisional_preferences"]
+    }
+    return rendered
 
 
 def user_facts_context(prompt: str) -> dict:
-    marker = (
-        "Structured user facts "
-        "(authoritative; override conflicting long-term memories):\n"
-    )
-    payload = prompt.split(marker, 1)[1].split(
-        "\n\nLong-term memories:",
-        1,
-    )[0]
-    return json.loads(payload)
+    return {
+        item["key"]: item["value"]
+        for item in unified_context(prompt)["user_facts"]
+    }
 
 
 class PromptProvider:
@@ -66,6 +66,9 @@ class CountingIdentityService:
     def snapshot(self):
         self.snapshot_calls += 1
         return self.service.snapshot()
+
+    def context_snapshot(self, limit=1000):
+        return self.snapshot()
 
 
 class IdentityContextTests(unittest.TestCase):
@@ -135,7 +138,7 @@ class IdentityContextTests(unittest.TestCase):
                     and context["display_name"] == "Nel"
                     and context["nature"] == "süni"
                     and context["role"]
-                    and "already rendered for Azerbaijani" in prompt
+                    and "identity.derived_display" in prompt
                 ):
                     return "Mən Neləm, süni rəqəmsal yoldaşam."
                 return "Naməlumdur."
@@ -167,8 +170,8 @@ class IdentityContextTests(unittest.TestCase):
             def respond(prompt):
                 context = identity_context(prompt)
                 required_rules = (
-                    "natural first-person predicate agreement",
-                    "Express the role directly as what Nel is",
+                    "Express Nel's role naturally",
+                    "possessive \"my role is\" construction",
                 )
                 if context["role"] and all(
                     rule in prompt for rule in required_rules
@@ -200,7 +203,7 @@ class IdentityContextTests(unittest.TestCase):
             provider = PromptProvider()
             nel = self._nel(database, provider)
             try:
-                nel.think("Adlar nədir?")
+                nel.think("display name User alias haqqında danış")
             finally:
                 nel.stop()
 
@@ -257,7 +260,7 @@ class IdentityContextTests(unittest.TestCase):
             provider = PromptProvider()
             nel = self._nel(database, provider, service)
             try:
-                nel.think("Seçimlərin varmı?")
+                nel.think("minimal interface style seçimi barədə danış")
             finally:
                 nel.stop()
 
@@ -269,7 +272,7 @@ class IdentityContextTests(unittest.TestCase):
                 {"interface_style": "minimal"},
             )
             self.assertIn(
-                "Provisional preferences are labeled provisional",
+                "Provisional preferences are explicitly provisional",
                 provider.prompt,
             )
 
@@ -303,7 +306,7 @@ class IdentityContextTests(unittest.TestCase):
             provider = PromptProvider(respond)
             nel = self._nel(database, provider, service)
             try:
-                response = nel.think("Cavab üslubun necədir?")
+                response = nel.think("concise response style necədir?")
             finally:
                 nel.stop()
 
@@ -373,7 +376,8 @@ class IdentityContextTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             _path, database = self._database(directory)
             service = IdentityService(IdentityRepository(database))
-            for index in range(IDENTITY_PREFERENCE_CONTEXT_LIMIT + 5):
+            limit = ContextBudget().established_preference_limit
+            for index in range(limit + 5):
                 key = f"preference_{index:02d}"
                 service.create_preference_candidate(
                     key,
@@ -396,7 +400,7 @@ class IdentityContextTests(unittest.TestCase):
             provider = PromptProvider()
             nel = self._nel(database, provider, service)
             try:
-                nel.think("Seçimlərin nədir?")
+                nel.think("x" * 300)
             finally:
                 nel.stop()
 
@@ -408,9 +412,12 @@ class IdentityContextTests(unittest.TestCase):
             )
             self.assertLessEqual(
                 len(context["established_preferences"]),
-                IDENTITY_PREFERENCE_CONTEXT_LIMIT,
+                limit,
             )
-            self.assertLessEqual(len(encoded), IDENTITY_CONTEXT_MAX_CHARS)
+            self.assertLessEqual(
+                len(unified_context(provider.prompt)["identity"]["established_preferences"]),
+                limit,
+            )
 
 
 if __name__ == "__main__":

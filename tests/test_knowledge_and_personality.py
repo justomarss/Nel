@@ -8,6 +8,7 @@ from src.core.nel import Nel
 from src.persistence.repositories import SQLiteKnowledge
 from src.persistence.sqlite import SQLiteDatabase
 from src.services.knowledge_service import KnowledgeService
+from tests.context_helpers import attach_context_assembler
 
 
 def fact_response(text, key, value, confidence=0.99):
@@ -150,10 +151,10 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
             def think(self, prompt):
                 self.prompt = prompt
                 required_rules = (
-                    "Structured user facts (authoritative; override conflicting long-term memories):",
-                    "User facts and long-term memories describe the user, not Nel",
-                    "Never invent Nel's own preferences, memories, experiences, emotions, relationships, or personal history.",
-                    "If Nel has no stored preference, say it has not formed one yet.",
+                    "Unified context JSON:",
+                    "User facts and memories describe the user, never Nel",
+                    "Never invent Nel's preferences, memories, experiences, emotions, relationships, or personal history.",
+                    "If no relevant stored preference exists, say Nel has not formed one yet.",
                 )
                 if all(rule in prompt for rule in required_rules):
                     return "Nel has not formed an anime preference yet."
@@ -166,13 +167,14 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
         nel.knowledge = KnowledgeService.__new__(KnowledgeService)
         nel.knowledge.knowledge = StoredKnowledge()
         nel.brain = Brain()
-        nel.raw_memory_context_limit = 20
+        attach_context_assembler(nel)
 
         response = nel.think("Sənin ən sevdiyin anime hansıdır?")
 
         self.assertEqual(response, "Nel has not formed an anime preference yet.")
         self.assertNotIn("prefers Bleach", response)
-        self.assertIn('"favorite_anime": "AoT"', nel.brain.prompt)
+        self.assertIn('"key":"favorite_anime"', nel.brain.prompt)
+        self.assertIn('"value":"AoT"', nel.brain.prompt)
 
     def test_user_first_person_question_becomes_second_person_answer(self):
         class Brain:
@@ -185,8 +187,8 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
                 self.prompt = prompt
                 required = (
                     'first-person forms such as "mən" and "mənim" refer to the user',
-                    'address the user with informal second-person forms such as "sən" and "sənin"',
-                    'Use "mən" and "mənim" in Nel\'s answer only for Nel\'s own identity or state',
+                    'Address the user with informal second-person forms such as "sən" and "sənin"',
+                    'Use "mən" and "mənim" in Nel\'s answer only for Nel\'s identity or state',
                 )
                 if all(rule in prompt for rule in required):
                     return "Sənin ən sevdiyin oyun MK11-dir."
@@ -205,7 +207,7 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
             },
         )()
         nel.brain = Brain()
-        nel.raw_memory_context_limit = 20
+        attach_context_assembler(nel)
 
         response = nel.think("Mənim ən sevdiyim oyun hansıdır?")
 
@@ -223,7 +225,7 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
             def think(self, prompt):
                 if (
                     'Use "mən" and "mənim" in Nel\'s answer only for '
-                    "Nel's own identity or state"
+                    "Nel's identity or state"
                 ) in prompt:
                     return "Mən Neləm."
                 return "Sən Nel'sən."
@@ -241,7 +243,7 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
             },
         )()
         nel.brain = Brain()
-        nel.raw_memory_context_limit = 20
+        attach_context_assembler(nel)
 
         self.assertEqual(nel.think("Sən kimsən?"), "Mən Neləm.")
 

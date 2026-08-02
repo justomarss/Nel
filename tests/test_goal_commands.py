@@ -21,6 +21,7 @@ from src.persistence.fact_migration import migrate_fact_schema_v3_to_v4
 from src.persistence.identity_migration import migrate_identity_schema_v1_to_v2
 from src.persistence.sqlite import SQLiteDatabase
 from src.thoughts import ThoughtCoordinator, ThoughtKind, TypedThoughtResult
+from tests.context_helpers import unified_context
 
 
 class PromptProvider:
@@ -52,12 +53,15 @@ class ObservationWorker:
 
 
 def goal_context(prompt: str) -> dict:
-    marker = "Goal snapshots (read-only; no authority to act):\n"
-    payload = prompt.split(marker, 1)[1].split(
-        "\n\nStructured user facts",
-        1,
-    )[0]
-    return json.loads(payload)
+    goals = unified_context(prompt)["goals"]
+    return {
+        "active_or_paused": [
+            item for item in goals if item["state"] in {"active", "paused"}
+        ],
+        "completed_or_cancelled": [
+            item for item in goals if item["state"] in {"completed", "cancelled"}
+        ],
+    }
 
 
 class GoalCommandIntegrationTests(unittest.TestCase):
@@ -410,7 +414,7 @@ class GoalCommandIntegrationTests(unittest.TestCase):
                         success_condition_accepted=True,
                     )
                 before = nel.goals.list_current()
-                nel.think("Məqsədlərim barədə nə bilirsən?")
+                nel.think("Aktiv və Bitmiş məqsədlər barədə danış")
                 after = nel.goals.list_current()
                 final_prompt = provider.prompts[-1]
                 context = goal_context(final_prompt)
@@ -425,7 +429,7 @@ class GoalCommandIntegrationTests(unittest.TestCase):
 
             self.assertLessEqual(len(context["active_or_paused"]), 10)
             self.assertLessEqual(len(context["completed_or_cancelled"]), 5)
-            self.assertLessEqual(len(serialized), 4096)
+            self.assertLessEqual(len(serialized), 12000)
             self.assertEqual(context["active_or_paused"][0]["title"], "Aktiv 11")
             self.assertIn(
                 "Ordinary conversation is not a goal command.",

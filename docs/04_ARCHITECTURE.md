@@ -22,7 +22,7 @@ technical defaults, not accepted permanent architecture.
 
 ```text
 root main.py (development CLI)
-  -> src/core/runtime.py (guarded schema-v3 composition)
+  -> src/core/runtime.py (guarded schema-v4 composition)
      -> src/core/nel.py (temporary composition root)
         -> bounded immutable DecisionContext
         -> pure deterministic DecisionEngine
@@ -31,7 +31,9 @@ root main.py (development CLI)
            -> conversation_response -> existing conversation flow
               -> IntentClassifier
               -> KnowledgeService / KnowledgeExtractor
-              -> bounded Memory and Identity context
+              -> ContextAssembler
+                 -> one canonical relevance-selected JSON bundle
+                 -> 12,000-character hard data-context ceiling
               -> Brain -> NvidiaNimProvider
            -> no_action -> no provider or write
         -> Clock / background event
@@ -61,13 +63,13 @@ is conversation, never a goal command.
 
 | Concept | Meaning | May become authoritative? | Current implementation |
 |---|---|---|---|
-| User Knowledge | Validated facts about Ömər | Yes, for user facts | Structured JSON key/value store |
-| Raw Memory | Historical interaction material | No, without validation | Long-term JSON list |
-| Nel Identity | Durable self-description and continuity | Yes, for Nel-owned facts | Not implemented |
+| User Knowledge | Validated facts about Ömər | Yes, for user facts | Versioned SQLite current/history records |
+| Raw Memory | Historical interaction material | No, without validation | SQLite memory events written explicitly through MemoryService |
+| Nel Identity | Durable self-description and continuity | Yes, for Nel-owned facts | Versioned SQLite identity records and read-only snapshots |
 | Nel State | Current operational/internal condition | Yes within its defined lifetime | In-memory enum only |
 | Thoughts | Generated private reflection candidates | No, unless separately evaluated | Bounded in-memory typed observations; no persistence |
-| Goals | Explicit desired outcomes | Yes after validation/ownership rules | JSON helper, not integrated |
-| Conversation Context | Bounded material for the current exchange | No | All raw long-term memory is injected |
+| Goals | Explicit desired outcomes | Yes after validation/ownership rules | Versioned SQLite goals and GoalService commands |
+| Conversation Context | Bounded material for the current exchange | No | Immutable canonical JSON assembled from read-only service snapshots |
 | Inference | A reasoned but unverified conclusion | No | No explicit representation |
 
 Thoughts, model replies, and inferences must never silently promote themselves
@@ -183,15 +185,27 @@ measured, and shown to outperform simpler indexed retrieval.
 
 ## Context and Retrieval
 
-The stable system must not send all historical memory to the model.
+ADR-024 defines `ContextAssembler` as the sole stored-data assembly boundary
+for conversational provider requests. It reads immutable bounded snapshots
+through Identity, Knowledge, Goal, and Memory services; it has no provider,
+repository, or write authority.
 
-[Provisional] Begin with deterministic metadata filtering, recency, explicit
-fact lookup, and a bounded context budget. Measure misses and irrelevant
-retrieval before considering embeddings.
+The assembler produces one canonical JSON string using deterministic Unicode
+normalization, lexical relevance, stable tie-breaking, complete-record
+packing, and a 12,000-character hard ceiling. Core identity is atomic. Active
+facts, current goals, eligible preferences, and memories are normally included
+only when relevant. Unused budget remains unused. Digest and character-count
+diagnostics remain outside provider-facing JSON.
 
-Structured facts remain authoritative when retrieved raw memories conflict.
-The prompt must preserve the distinction between user data and Nel-owned
-state.
+Identity failure aborts conversational generation. Fact, goal, or memory
+source failures omit the optional section with safe metadata. A fact omission
+also adds a strict instruction prohibiting personal-fact invention for that
+turn. Local fact reads fail safely instead of claiming that no records exist.
+
+Selection is exact and predictable but does not understand synonyms,
+paraphrases, or Azerbaijani morphology. Measure false negatives before
+considering embeddings or semantic retrieval. Structured facts remain
+authoritative when included memories conflict.
 
 ## Runtime and Events
 

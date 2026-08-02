@@ -7,6 +7,7 @@ from src.core.state import State
 from src.errors import ApplicationError, ProviderError
 from src.services.knowledge_service import KnowledgeService
 from src.services.memory_service import MemoryService, MemoryWriteStatus
+from tests.context_helpers import StaticIdentityService
 
 
 class FakeProvider:
@@ -94,17 +95,19 @@ class DependencyInjectionTests(unittest.TestCase):
             provider=provider,
             memory_repository=memory,
             knowledge_repository=knowledge,
+            identity_service=StaticIdentityService(),
         )
         try:
             result = nel.remember("injected memory")
-            response = nel.think("Salam")
+            response = nel.think("Ömər injected memory")
 
             self.assertEqual(result.status, MemoryWriteStatus.ACCEPTED)
             self.assertIsInstance(nel.memory, MemoryService)
             self.assertIs(nel.memory.repository, memory)
             self.assertEqual(response, "foreground reply")
             self.assertEqual(memory.items, ["injected memory"])
-            self.assertIn('"name": "Ömər"', provider.prompts[-1])
+            self.assertIn('"key":"name"', provider.prompts[-1])
+            self.assertIn('"value":"Ömər"', provider.prompts[-1])
             self.assertIn("injected memory", provider.prompts[-1])
         finally:
             nel.stop()

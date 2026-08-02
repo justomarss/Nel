@@ -97,6 +97,33 @@ class SQLiteMemory:
         finally:
             connection.close()
 
+    def context_snapshot(self, limit=1000):
+        connection = self.database.connect()
+        try:
+            rows = connection.execute(
+                """
+                SELECT id, content, stored_at
+                FROM (
+                    SELECT id, content, stored_at
+                    FROM memory_events
+                    ORDER BY id DESC
+                    LIMIT ?
+                )
+                ORDER BY id
+                """,
+                (limit,),
+            ).fetchall()
+            return tuple(
+                {
+                    "event_id": row["id"],
+                    "stored_at": row["stored_at"],
+                    "text": row["content"],
+                }
+                for row in rows
+            )
+        finally:
+            connection.close()
+
 
 class SQLiteKnowledge:
     def __init__(self, database: SQLiteDatabase):

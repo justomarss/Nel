@@ -19,6 +19,30 @@ class IdentityService:
     def snapshot(self) -> IdentitySnapshot:
         return self._repository.snapshot()
 
+    def context_snapshot(self, limit=1000) -> IdentitySnapshot:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
+            raise ValueError(
+                "Identity preference context limit must be a non-negative integer."
+            )
+        snapshot = self.snapshot()
+        preferences = tuple(
+            sorted(
+                (
+                    record
+                    for record in snapshot.preferences
+                    if record.preference_state in {"established", "provisional"}
+                ),
+                key=lambda record: (record.preference_state, record.key),
+            )[:limit]
+        )
+        return IdentitySnapshot(
+            identity_id=snapshot.identity_id,
+            display_name=snapshot.display_name,
+            nature=snapshot.nature,
+            role=snapshot.role,
+            preferences=preferences,
+        )
+
     def get_preference(self, key: str):
         normalized = self._validate_key(key)
         return self._repository.get_preference(normalized)

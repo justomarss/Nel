@@ -92,8 +92,14 @@ yet meet the first-stable criteria.
   and late cancelled results are discarded.
 - Background thought generation is configuration-gated and defaults off;
   `Clock`, `EventBus`, `ThoughtService`, and `DecisionEngine` remain wired.
-- Raw prompt context has a configurable count limit and prefers the newest
-  memories without deleting older stored memory.
+- `ContextAssembler` is the sole stored-data prompt boundary for conversational
+  provider requests. It emits deterministic canonical JSON with a 12,000
+  character hard ceiling, SHA-256 diagnostics, complete-record packing, and
+  relevance-selected identity preferences, active facts, current goals, and
+  memory events.
+- Core identity is mandatory. Optional fact, goal, and memory read failures are
+  represented by safe omission metadata; fact omission adds a strict
+  no-personal-fact assertion rule for that turn.
 - Windows stdout and stderr are configured for UTF-8 when supported.
 - Private SQLite data, cutover artifacts, historical JSON, and `.env` are
   ignored by Git.
@@ -102,7 +108,7 @@ yet meet the first-stable criteria.
 
 | Capability | Current limitation |
 |---|---|
-| Memory | Raw long-term strings; only a bounded newest subset is sent, without relevance scoring |
+| Memory | Raw long-term strings; exact lexical relevance and duplicate defense select at most ten complete events, without semantic retrieval |
 | Knowledge | Current values, superseded history, and versioned retirement are transactional; provider candidates are grounded but ephemeral, and durable provenance beyond revision reasons is not implemented |
 | Intent classification | Keyword rules; narrow and not robustly tested |
 | State | Operational state is an in-memory enum; persistent Nel identity is stored separately and is read into prompts without a conversation write path |
@@ -112,7 +118,7 @@ yet meet the first-stable criteria.
 | Clock | Lifecycle is owned, but an active provider callback cannot be cancelled early |
 | Provider independence | Brain is injected, but composition hardcodes NVIDIA NIM |
 | Error handling | Provider and background failures are bounded; startup persistence and provider-configuration failures are redacted, while operational write failures need broader application handling |
-| Retrieval | Structured facts enter prompts, but there is no relevant-memory retrieval |
+| Retrieval | Unified deterministic lexical selection is active; synonyms, paraphrases, morphology, embeddings, and semantic retrieval are absent |
 | Silence/autonomy | Reflection exists; controlled silence and topic initiation do not |
 
 ## Not Implemented
@@ -128,7 +134,7 @@ yet meet the first-stable criteria.
 
 ## Tests
 
-The repository has 256 assertion-based `unittest` cases covering:
+The repository has 277 assertion-based `unittest` cases covering:
 
 - temporary new, correction, reactivation, and same-value fact proposals with
   no provider-authoritative durable writes;
@@ -169,6 +175,9 @@ The repository has 256 assertion-based `unittest` cases covering:
   foreground thought invalidation, provider exclusion, and CLI routing.
 - import safety without NVIDIA credentials and redacted provider-configuration
   failures at provider and CLI startup boundaries.
+- canonical context determinism, SHA-256 digests, separate system/user limits,
+  complete-record budgeting, relevance and stable ordering, source failures,
+  duplicate memory defense, and absence of provider/repository/write authority.
 
 `tests/test_event.py` is a print-based EventBus smoke script, not an
 assertion-based test.
@@ -179,8 +188,8 @@ so provider integration is not yet operationally reliable.
 
 ## Known Technical Risks
 
-1. Raw history is count-bounded in prompts but selected by recency rather
-   than relevance and can still conflict with current facts.
+1. Context relevance is deterministic lexical matching; it can miss synonyms,
+   paraphrases, and Azerbaijani morphological variants.
 2. SQLite rollback to historical JSON is no longer valid after post-cutover
    writes; recovery must use SQLite or a verified SQLite backup.
 3. In-flight thought provider work cannot be interrupted after it starts;
@@ -194,8 +203,8 @@ so provider integration is not yet operationally reliable.
    foreground request can occupy the full 45-second timeout.
 7. Tests primarily use fakes; live provider outage behavior still lacks
    deterministic automated coverage.
-8. Complete prompt context has no unified serialized-character budget, and
-   memory retrieval remains recency-based rather than relevance-based.
+8. The 12,000-character limit is provider-independent but does not guarantee a
+   provider token count or latency bound.
 9. The retained cutover CLI targets schema v1 and is not the operational
    verifier for the active schema-v4 database.
 
@@ -226,13 +235,10 @@ documents remain present but are non-normative until reconciled.
 
 ## Current Contradictions With Direction
 
-- The target requires relevant retrieval; current prompts use a bounded newest
-  subset without relevance scoring.
 - The target is provider-independent; construction currently hardcodes NIM.
 
 ## Remaining v1.0 Blockers
 
-- Add a total serialized context budget and relevant-memory selection.
 - Replace or retire schema-v1-only operational cutover verification tooling.
 - Create a fresh validated release backup and complete sustained runtime,
   controlled initiation, and appropriate-silence acceptance checks.

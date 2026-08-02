@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from src.core.nel import Nel
 from src.memory.memory import Memory
+from tests.context_helpers import attach_context_assembler, unified_context
 
 
 class MemoryContextTests(unittest.TestCase):
@@ -68,15 +69,11 @@ class MemoryContextTests(unittest.TestCase):
             )
             nel.memory = memory
             nel.brain = brain
-            nel.raw_memory_context_limit = 2
+            attach_context_assembler(nel)
 
             self.assertEqual(nel.think("hello"), "ok")
-            self.assertNotIn(
-                "OLD_MEMORY_SHOULD_NOT_APPEAR",
-                brain.prompt,
-            )
-            self.assertIn("RECENT_MEMORY_ONE", brain.prompt)
-            self.assertIn("RECENT_MEMORY_TWO", brain.prompt)
+            context = unified_context(brain.prompt)
+            self.assertEqual(context["memories"], [])
             self.assertEqual(
                 json.loads(path.read_text(encoding="utf-8")),
                 stored,

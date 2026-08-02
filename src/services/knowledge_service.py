@@ -10,6 +10,7 @@ from src.knowledge import (
     GroundingError,
 )
 from src.persistence.normalization import normalize_fact_key
+from src.context.models import FactContextSnapshot
 
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,14 @@ class KnowledgeService:
 
     def facts(self):
         return self.knowledge.load()
+
+    def context_snapshot(self, limit=1000) -> tuple[FactContextSnapshot, ...]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
+            raise ValueError("Fact context limit must be a non-negative integer.")
+        return tuple(
+            FactContextSnapshot(key, value)
+            for key, value in sorted(self.facts().items())[:limit]
+        )
 
     def correct_fact(self, key, value, *, confirmed=False):
         if not confirmed:

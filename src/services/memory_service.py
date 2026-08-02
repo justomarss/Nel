@@ -1,9 +1,9 @@
-import hashlib
 import logging
-import re
-import unicodedata
 from dataclasses import dataclass
 from enum import Enum
+
+from src.context.models import MemoryContextSnapshot
+from src.memory.normalization import memory_fingerprint, normalize_memory_text
 
 
 logger = logging.getLogger(__name__)
@@ -30,16 +30,6 @@ class MemoryWriteResult:
     message: str
 
 
-def normalize_memory_text(text: str) -> str:
-    normalized = unicodedata.normalize("NFKC", text).casefold().strip()
-    return re.sub(r"\s+", " ", normalized, flags=re.UNICODE)
-
-
-def memory_fingerprint(text: str) -> str:
-    normalized = normalize_memory_text(text)
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-
-
 class MemoryService:
     """Validates and performs explicit durable-memory writes.
 
@@ -57,6 +47,26 @@ class MemoryService:
 
     def recall(self, limit=None):
         return self._repository.recall(limit=limit)
+
+    def context_snapshot(self, limit=1000) -> tuple[MemoryContextSnapshot, ...]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
+            raise ValueError("Memory context limit must be a non-negative integer.")
+        reader = getattr(self._repository, "context_snapshot", None)
+        if callable(reader):
+            rows = reader(limit=limit)
+            return tuple(
+                MemoryContextSnapshot(
+                    event_id=row["event_id"],
+                    stored_at=row["stored_at"],
+                    text=row["text"],
+                )
+                for row in rows
+            )
+        memories = self._repository.recall(limit=limit)
+        return tuple(
+            MemoryContextSnapshot(index, None, text)
+            for index, text in enumerate(memories, start=1)
+        )
 
     def remember_explicit(self, text: str) -> MemoryWriteResult:
         if not isinstance(text, str) or not normalize_memory_text(text):

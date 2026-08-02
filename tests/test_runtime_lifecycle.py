@@ -14,6 +14,7 @@ from src.core.config import (
 from src.core.nel import Nel
 from src.core.state import State
 from src.errors import ApplicationError, ProviderError
+from tests.context_helpers import attach_context_assembler
 
 
 class RuntimeLifecycleTests(unittest.TestCase):
@@ -65,7 +66,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         )
         nel.memory = SimpleNamespace(recall=lambda limit=None: [])
         nel.brain = Brain()
-        nel.raw_memory_context_limit = 20
+        attach_context_assembler(nel)
 
         self.assertEqual(nel.think("hello"), "foreground reply")
 
@@ -258,7 +259,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         )
         nel.memory = SimpleNamespace(recall=lambda limit=None: [])
         nel.brain = Brain()
-        nel.raw_memory_context_limit = 20
+        attach_context_assembler(nel)
 
         with self.assertRaises(ApplicationError):
             nel.think("hello")
@@ -291,7 +292,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         )
         nel.memory = SimpleNamespace(recall=lambda limit=None: [])
         nel.brain = TimedOutBrain()
-        nel.raw_memory_context_limit = 20
+        attach_context_assembler(nel)
 
         with self.assertRaises(ApplicationError):
             nel.think("hello")
