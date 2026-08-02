@@ -109,29 +109,16 @@ class DependencyInjectionTests(unittest.TestCase):
         finally:
             nel.stop()
 
-    def test_knowledge_service_uses_atomic_set_many_when_available(self):
+    def test_provider_candidates_never_use_atomic_set_many(self):
         repository = AtomicKnowledgeRepository()
         service = KnowledgeService(object(), repository=repository)
         service.extractor = SimpleNamespace(
-            extract=lambda _text: {
-                "favorite_anime": "AoT",
-                "name": "Ömər",
-            }
+            extract=lambda _text: ()
         )
 
         service.process("ignored")
 
-        self.assertEqual(
-            repository.batches,
-            [[
-                {
-                    "key": "favorite_anime",
-                    "value": "AoT",
-                    "subject": "user",
-                },
-                {"key": "name", "value": "Ömər", "subject": "user"},
-            ]],
-        )
+        self.assertEqual(repository.batches, [])
 
     @patch("src.core.nel.Clock.start")
     def test_injected_identity_service_is_retained(self, _clock_start):
@@ -153,11 +140,8 @@ class DependencyInjectionTests(unittest.TestCase):
     def test_knowledge_service_preserves_legacy_repository_contract(self):
         repository = LegacyKnowledgeRepository()
         service = KnowledgeService(object(), repository=repository)
-        service.extractor = SimpleNamespace(
-            extract=lambda _text: {"name": "Ömər", "favorite_game": "MK11"}
-        )
-
-        service.process("ignored")
+        service.correct_fact("name", "Ömər", confirmed=True)
+        service.correct_fact("favorite_game", "MK11", confirmed=True)
 
         self.assertEqual(
             repository.set_calls,

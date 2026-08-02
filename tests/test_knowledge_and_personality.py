@@ -10,7 +10,8 @@ from src.persistence.sqlite import SQLiteDatabase
 from src.services.knowledge_service import KnowledgeService
 
 
-def fact_response(key, value, confidence=0.99):
+def fact_response(text, key, value, confidence=0.99):
+    value_start = text.index(value)
     return json.dumps(
         {
             "facts": [
@@ -19,6 +20,11 @@ def fact_response(key, value, confidence=0.99):
                     "value": value,
                     "subject": "user",
                     "confidence": confidence,
+                    "source_start": 0,
+                    "source_end": len(text),
+                    "source_quote": text,
+                    "value_start": value_start,
+                    "value_end": value_start + len(value),
                 }
             ]
         },
@@ -51,43 +57,46 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
         )
         return service, provider
 
-    def test_newer_favorite_anime_overwrites_older_value(self):
+    def test_provider_correction_is_proposed_without_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:
+            text = "Mənim ən sevdiyim anime AoT-dir."
             service, _ = self.create_service(
                 directory,
-                fact_response("Favorite Anime", "Bleach"),
-                fact_response("favorite-anime", "AoT"),
+                fact_response(text, "favorite_anime", "AoT"),
             )
+            service.correct_fact("favorite_anime", "Bleach", confirmed=True)
 
-            service.process("Mənim ən sevdiyim anime Bleach-dir.")
-            service.process("Mənim ən sevdiyim anime AoT-dir.")
+            proposals = service.process(text)
 
-            stored = service.facts()
-            self.assertEqual(stored, {"favorite_anime": "AoT"})
+            self.assertEqual(service.facts(), {"favorite_anime": "Bleach"})
+            self.assertEqual(proposals[0].candidate.value, "AoT")
+            self.assertEqual(proposals[0].proposal_type.value, "correction")
 
     def test_favorite_game_preserves_literal_value(self):
         with tempfile.TemporaryDirectory() as directory:
+            text = "Mənim ən sevdiyim oyun MK11-dir."
             service, _ = self.create_service(
                 directory,
-                fact_response("Favorite Game", "MK11"),
+                fact_response(text, "favorite_game", "MK11"),
             )
 
-            service.process("Mənim ən sevdiyim oyun MK11-dir.")
+            proposals = service.process(text)
 
-            stored = service.facts()
-            self.assertEqual(stored, {"favorite_game": "MK11"})
+            self.assertEqual(service.facts(), {})
+            self.assertEqual(proposals[0].candidate.value, "MK11")
 
     def test_user_name_preserves_unicode_literal(self):
         with tempfile.TemporaryDirectory() as directory:
+            text = "Mənim adım Ömərdir."
             service, _ = self.create_service(
                 directory,
-                fact_response("Name", "Ömər"),
+                fact_response(text, "name", "Ömər"),
             )
 
-            service.process("Mənim adım Ömərdir.")
+            proposals = service.process(text)
 
-            stored = service.facts()
-            self.assertEqual(stored, {"name": "Ömər"})
+            self.assertEqual(service.facts(), {})
+            self.assertEqual(proposals[0].candidate.value, "Ömər")
 
     def test_sentence_without_durable_fact_stores_nothing(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -101,12 +110,11 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
             stored = service.facts()
             self.assertEqual(stored, {})
 
-    def test_malformed_json_retries_once_then_logs(self):
+    def test_malformed_json_is_rejected_without_retry(self):
         with tempfile.TemporaryDirectory() as directory:
             service, provider = self.create_service(
                 directory,
                 "not JSON",
-                '{"facts": [}',
             )
 
             with self.assertLogs(
@@ -117,8 +125,8 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
 
             stored = service.facts()
             self.assertEqual(stored, {})
-            self.assertEqual(provider.calls, 2)
-            self.assertIn("No facts stored", logs.output[0])
+            self.assertEqual(provider.calls, 1)
+            self.assertIn("Knowledge candidate extraction rejected", logs.output[0])
 
     def test_prompt_prevents_unstored_nel_preference_claim(self):
         class State:

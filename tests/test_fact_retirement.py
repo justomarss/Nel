@@ -54,7 +54,8 @@ class RecordingProvider:
         return '{"facts": []}'
 
 
-def fact_response(key, value):
+def fact_response(text, key, value):
+    value_start = text.index(value)
     return json.dumps(
         {
             "facts": [
@@ -63,6 +64,11 @@ def fact_response(key, value):
                     "value": value,
                     "subject": "user",
                     "confidence": 1.0,
+                    "source_start": 0,
+                    "source_end": len(text),
+                    "source_quote": text,
+                    "value_start": value_start,
+                    "value_end": value_start + len(value),
                 }
             ]
         },
@@ -347,7 +353,7 @@ class InterrogativeGuardTests(unittest.TestCase):
         )
         for text, key, value in cases:
             with self.subTest(text=text):
-                provider = QueueProvider(fact_response(key, value))
+                provider = QueueProvider(fact_response(text, key, value))
                 with tempfile.TemporaryDirectory() as directory:
                     database = SQLiteDatabase(Path(directory) / "guard.sqlite3")
                     database.initialize()
@@ -356,12 +362,13 @@ class InterrogativeGuardTests(unittest.TestCase):
                         SQLiteKnowledge(database),
                     )
                     service.process(text)
-                    self.assertEqual(service.facts(), {key: value})
+                    self.assertEqual(service.facts(), {})
                     self.assertEqual(provider.calls, 1)
                     self.assertFalse(is_interrogative_user_input(text))
 
     def test_explicit_declarative_fact_still_works(self):
-        provider = QueueProvider(fact_response("name", "Ömər"))
+        text = "Mənim adım Ömərdir."
+        provider = QueueProvider(fact_response(text, "name", "Ömər"))
         with tempfile.TemporaryDirectory() as directory:
             database = SQLiteDatabase(Path(directory) / "guard.sqlite3")
             database.initialize()
@@ -369,8 +376,9 @@ class InterrogativeGuardTests(unittest.TestCase):
                 type("Brain", (), {"provider": provider})(),
                 SQLiteKnowledge(database),
             )
-            service.process("Mənim adım Ömərdir.")
-            self.assertEqual(service.facts(), {"name": "Ömər"})
+            proposals = service.process(text)
+            self.assertEqual(service.facts(), {})
+            self.assertEqual(proposals[0].candidate.value, "Ömər")
 
 
 class FactCommandRuntimeTests(unittest.TestCase):

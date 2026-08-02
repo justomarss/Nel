@@ -223,7 +223,9 @@ class Nel:
                     return answer
 
             if intent == "REMEMBER":
-                self.knowledge.process(prompt)
+                fact_proposals = self.knowledge.process(prompt)
+            else:
+                fact_proposals = ()
 
             memories = self.memory.recall(
                 limit=self.raw_memory_context_limit,
@@ -284,7 +286,20 @@ User:
 Nel:
 """
 
-            return self.brain.think(final_prompt)
+            response = self.brain.think(final_prompt)
+            render_proposals = getattr(
+                self.knowledge,
+                "render_proposals",
+                None,
+            )
+            proposal_guidance = (
+                render_proposals(fact_proposals)
+                if fact_proposals and callable(render_proposals)
+                else ""
+            )
+            if proposal_guidance:
+                return f"{response}\n\n{proposal_guidance}"
+            return response
 
         except ProviderError:
             raise ApplicationError(

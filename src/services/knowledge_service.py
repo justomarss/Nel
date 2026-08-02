@@ -1,7 +1,18 @@
+import logging
+import shlex
 from dataclasses import dataclass
 
 from src.brain.knowledge_extractor import KnowledgeExtractor
+from src.knowledge import (
+    FactGroundingPolicy,
+    FactProposal,
+    FactProposalType,
+    GroundingError,
+)
 from src.persistence.normalization import normalize_fact_key
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -17,29 +28,65 @@ class FactRevision:
 
 class KnowledgeService:
 
-    def __init__(self, brain, repository):
+    def __init__(self, brain, repository, grounding_policy=None):
         self.extractor = KnowledgeExtractor(brain)
         self.knowledge = repository
+        self.grounding_policy = grounding_policy or FactGroundingPolicy()
 
     def process(self, text):
+        candidates = self.extractor.extract(text)
+        try:
+            grounded = self.grounding_policy.validate_batch(text, candidates)
+        except GroundingError as exc:
+            logger.info(
+                "Fact candidate batch rejected (%s).",
+                exc.reason_code,
+            )
+            return ()
+        return tuple(
+            proposal
+            for candidate in grounded
+            if (proposal := self._classify(candidate)) is not None
+        )
 
-        facts = self.extractor.extract(text)
+    def render_proposals(self, proposals) -> str:
+        sections = []
+        for proposal in proposals:
+            if not isinstance(proposal, FactProposal):
+                continue
+            candidate = proposal.candidate
+            sections.append(
+                "Proposed, not stored "
+                f"({proposal.proposal_type.value}):\n"
+                f"{candidate.key} = {candidate.value}\n\n"
+                "To store it, use:\n"
+                f"/fact set {candidate.key} "
+                f"--value {shlex.quote(candidate.value)} --confirm"
+            )
+        return "\n\n".join(sections)
 
-        if not isinstance(facts, dict):
-            return
-
-        set_many = getattr(self.knowledge, "set_many", None)
-        if callable(set_many):
-            batch = [
-                {"key": key, "value": value, "subject": "user"}
-                for key, value in facts.items()
-            ]
-            if batch:
-                set_many(batch)
-            return
-
-        for key, value in facts.items():
-            self.knowledge.set(key, value)
+    def _classify(self, candidate):
+        current = self.knowledge.get(candidate.key)
+        if current == candidate.value:
+            return None
+        if current is not None:
+            proposal_type = FactProposalType.CORRECTION
+        else:
+            current_revision = next(
+                (
+                    revision
+                    for revision in reversed(self.history(candidate.key))
+                    if revision.is_current
+                ),
+                None,
+            )
+            proposal_type = (
+                FactProposalType.REACTIVATION
+                if current_revision is not None
+                and current_revision.fact_state == "retired"
+                else FactProposalType.NEW
+            )
+        return FactProposal(candidate, proposal_type)
 
     def get(self, key):
         return self.knowledge.get(key)

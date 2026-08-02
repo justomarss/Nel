@@ -136,16 +136,23 @@ requirements.
 The generic extraction pipeline is:
 
 1. Receive user text.
-2. Request a schema-constrained fact envelope.
-3. Validate key, literal value, subject, and confidence locally.
-4. Accept only facts whose subject is `user`.
-5. Normalize key formatting generically.
-6. Retry invalid output once with a repair prompt.
-7. Log a visible diagnostic and store nothing after a second failure.
-8. Supersede the current value for the same normalized key.
+2. Exclude questions, slash commands, and local read-only intents.
+3. Request one schema-constrained candidate envelope containing the normalized
+   key, exact literal value, user subject, confidence, and exact source/value
+   spans.
+4. Reject the whole batch when provider output is malformed; do not repair or
+   retry with a more permissive prompt.
+5. Validate every candidate deterministically against the original Unicode
+   text, including exact offsets, exact quotes, literal values, user
+   ownership, and conservative linguistic safety rules.
+6. Compare grounded candidates with current facts only to classify temporary
+   new, correction, reactivation, or same-value results.
+7. Render non-no-op proposals as local guidance for an explicit confirmed
+   `/fact set` command. Do not persist candidates or pending state.
 
-The schema must remain topic-neutral. Semantic key consistency and historical
-supersession require stronger persistence than the current flat JSON object.
+Provider extraction is advisory and has no durability authority. Only
+confirmed `/fact set` and `/fact retire` commands may write through
+`KnowledgeService`. The schema and grounding policy remain topic-neutral.
 
 ## Nel-Owned Identity and State
 

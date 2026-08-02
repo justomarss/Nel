@@ -7,7 +7,7 @@ Baseline date: 2026-08-02
 ## Summary
 
 Nel is an early Python prototype with a command-line development shell,
-NVIDIA NIM inference, generic validated user-fact extraction, authoritative
+NVIDIA NIM inference, generic grounded user-fact proposals, authoritative
 SQLite persistence, transient operational state, and a daemon-thread
 reflection clock.
 
@@ -34,10 +34,16 @@ yet meet the first-stable criteria.
 - `NvidiaNimProvider` supports text and strict JSON-schema generation,
   a 45-second interactive timeout, no SDK retries, empty-response checks,
   and redacted error messages.
-- `KnowledgeExtractor` uses a generic fact envelope, local Pydantic
-  validation, generic key normalization, one repair attempt, and warning
-  diagnostics.
-- Structured user facts overwrite the current value for a normalized key.
+- `KnowledgeExtractor` produces schema-validated temporary candidates with
+  exact source and value spans. Malformed output rejects the batch without a
+  repair retry.
+- `FactGroundingPolicy` validates candidates deterministically against the
+  original user text and fails closed on unsupported ownership, negation,
+  historical-only evidence, comparative overclaims, contradictions, or any
+  transformed literal value.
+- Provider-proposed facts never write durable state. Grounded new, correction,
+  and reactivation proposals are temporary guidance for an explicit confirmed
+  `/fact set`; same-value candidates are no-ops.
 - The active conversation prompt marks structured facts authoritative and
   prohibits fabricated Nel preferences and history. It also defines generic
   Azerbaijani perspective ownership so user first-person questions become
@@ -97,7 +103,7 @@ yet meet the first-stable criteria.
 | Capability | Current limitation |
 |---|---|
 | Memory | Raw long-term strings; only a bounded newest subset is sent, without relevance scoring |
-| Knowledge | Current values, superseded history, and versioned retirement are transactional; provenance beyond revision reasons is not implemented |
+| Knowledge | Current values, superseded history, and versioned retirement are transactional; provider candidates are grounded but ephemeral, and durable provenance beyond revision reasons is not implemented |
 | Intent classification | Keyword rules; narrow and not robustly tested |
 | State | Operational state is an in-memory enum; persistent Nel identity is stored separately and is read into prompts without a conversation write path |
 | Thoughts | Minimal in-memory typed observation pipeline is wired; policies reject permanent changes and automatic generation remains disabled by default |
@@ -122,13 +128,15 @@ yet meet the first-stable criteria.
 
 ## Tests
 
-The repository has 240 assertion-based `unittest` cases covering:
+The repository has 256 assertion-based `unittest` cases covering:
 
-- user favorite update from an older to newer value;
-- literal value preservation for different fact domains;
+- temporary new, correction, reactivation, and same-value fact proposals with
+  no provider-authoritative durable writes;
+- exact source/value grounding, literal Unicode preservation, batch rejection,
+  conservative linguistic rejection, and no malformed-output repair retry;
 - Unicode user-name preservation;
 - no-fact extraction;
-- one malformed-JSON repair followed by visible failure;
+- malformed extraction rejection without retry or durable writes;
 - prompt protection against unstored Nel preferences.
 - idempotent Clock lifecycle and callback-failure survival;
 - CLI cleanup and foreground provider-error recovery;
@@ -177,8 +185,9 @@ so provider integration is not yet operationally reliable.
    writes; recovery must use SQLite or a verified SQLite backup.
 3. In-flight thought provider work cannot be interrupted after it starts;
    cancellation invalidates and discards its eventual result instead.
-4. Structured extraction is schema-validated, but provider-produced facts are
-   not yet deterministically grounded against the literal user statement.
+4. Conservative grounding intentionally produces false negatives for
+   linguistically ambiguous statements and does not resolve semantic key
+   synonyms.
 5. Structured keys are format-normalized, but semantic synonym consistency
    is not guaranteed.
 6. The provisional 70B model showed variable latency in qualification; a
@@ -220,13 +229,9 @@ documents remain present but are non-normative until reconciled.
 - The target requires relevant retrieval; current prompts use a bounded newest
   subset without relevance scoring.
 - The target is provider-independent; construction currently hardcodes NIM.
-- Generated extraction output can still become durable user knowledge after
-  structural validation without deterministic semantic grounding.
 
 ## Remaining v1.0 Blockers
 
-- Define and enforce a deterministic authority boundary for provider-assisted
-  user-fact extraction.
 - Add a total serialized context budget and relevant-memory selection.
 - Replace or retire schema-v1-only operational cutover verification tooling.
 - Create a fresh validated release backup and complete sustained runtime,
