@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from src.brain.local_intent_classifier import IntentType, LocalIntentClassifier
 from src.core.runtime import create_runtime_nel
+from src.errors import PersistenceOperationError
 from src.persistence.goal_migration import migrate_goal_schema_v2_to_v3
 from src.persistence.fact_migration import migrate_fact_schema_v3_to_v4
 from src.persistence.identity_migration import migrate_identity_schema_v1_to_v2
@@ -55,6 +56,9 @@ class LocalIntentClassifierTests(unittest.TestCase):
             "Mənim ən sevdiyim oyun nədir?",
             "Mənim ən sevdiyim rəng hansıdır?",
             "Mənim haqqında nə bilirsən?",
+            "Mənim haqqımda nə bilirsən?",
+            "MƏNİM HAQQIMDA NƏ BİLİRSƏN?!",
+            "  Mənim, haqqımda... nə bilirsən?!  ",
         )
         for phrase in phrases:
             with self.subTest(phrase=phrase):
@@ -79,6 +83,8 @@ class LocalIntentClassifierTests(unittest.TestCase):
             "Məqsəd sözünün mənası nədir?",
             "Sənin ən sevdiyin oyun nədir?",
             "Öz kimliyini ətraflı təsvir et.",
+            "Bu kitab haqqında nə düşünürsən?",
+            "Layihə haqqında sonra danışarıq.",
         )
         for phrase in phrases:
             with self.subTest(phrase=phrase):
@@ -211,6 +217,43 @@ class LocalIntentIntegrationTests(unittest.TestCase):
         self.assertEqual(response.count("Sənin "), 1)
         self.assertEqual(response.count("ən sevdiyin "), 2)
         self.assertNotIn("sevdiyim", response)
+        self.assertEqual(provider.prompts, [])
+
+    def test_haqqimda_user_fact_query_is_local_for_case_and_punctuation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            provider = RecordingProvider()
+            _path, nel = self._runtime(directory, provider)
+            nel.knowledge.knowledge.set("preferred_language", "Azərbaycan dili")
+            try:
+                responses = tuple(
+                    nel.think(phrase)
+                    for phrase in (
+                        "Mənim haqqımda nə bilirsən?",
+                        "MƏNİM HAQQIMDA NƏ BİLİRSƏN?!",
+                        "Mənim, haqqımda... nə bilirsən?!",
+                    )
+                )
+            finally:
+                nel.stop()
+
+        self.assertTrue(all("Azərbaycan dili" in item for item in responses))
+        self.assertEqual(provider.prompts, [])
+
+    def test_haqqimda_fact_read_failure_is_safe_and_provider_free(self):
+        with tempfile.TemporaryDirectory() as directory:
+            provider = RecordingProvider()
+            _path, nel = self._runtime(directory, provider)
+            try:
+                with patch.object(
+                    nel.knowledge,
+                    "facts",
+                    side_effect=PersistenceOperationError(),
+                ):
+                    response = nel.think("Mənim haqqımda nə bilirsən?")
+            finally:
+                nel.stop()
+
+        self.assertIn("əlçatan deyil", response)
         self.assertEqual(provider.prompts, [])
 
     def test_unknown_fact_keys_keep_second_person_ownership(self):

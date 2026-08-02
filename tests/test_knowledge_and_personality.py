@@ -152,9 +152,9 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
                 self.prompt = prompt
                 required_rules = (
                     "Unified context JSON:",
-                    "User facts and memories describe the user, never Nel",
-                    "Never invent Nel's preferences, memories, experiences, emotions, relationships, or personal history.",
-                    "If no relevant stored preference exists, say Nel has not formed one yet.",
+                    "User facts and memories describe the user, never the assistant",
+                    "Never invent the assistant's preferences, memories, experiences, emotions, relationships, or personal history.",
+                    "If no relevant stored preference exists, say the assistant has not formed one yet.",
                 )
                 if all(rule in prompt for rule in required_rules):
                     return "Nel has not formed an anime preference yet."
@@ -188,7 +188,7 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
                 required = (
                     'first-person forms such as "mən" and "mənim" refer to the user',
                     'Address the user with informal second-person forms such as "sən" and "sənin"',
-                    'Use "mən" and "mənim" in Nel\'s answer only for Nel\'s identity or state',
+                    'Use "mən" and "mənim" in the assistant\'s answer only for the assistant\'s identity or state',
                 )
                 if all(rule in prompt for rule in required):
                     return "Sənin ən sevdiyin oyun MK11-dir."
@@ -224,8 +224,8 @@ class KnowledgeAndPersonalityTests(unittest.TestCase):
 
             def think(self, prompt):
                 if (
-                    'Use "mən" and "mənim" in Nel\'s answer only for '
-                    "Nel's identity or state"
+                    'Use "mən" and "mənim" in the assistant\'s answer only for '
+                    "the assistant's identity or state"
                 ) in prompt:
                     return "Mən Neləm."
                 return "Sən Nel'sən."

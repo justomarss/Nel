@@ -31,6 +31,7 @@ class LocalIntentClassifier:
     _USER_FACT_PHRASES = frozenset(
         {
             "mənim haqqında nə bilirsən",
+            "mənim haqqımda nə bilirsən",
         }
     )
     _FAVORITE_FACT_QUERY = re.compile(
@@ -74,7 +75,9 @@ class LocalIntentClassifier:
     def normalize(text: str) -> str:
         if not isinstance(text, str):
             return ""
-        normalized = unicodedata.normalize("NFKC", text).casefold()
+        normalized = unicodedata.normalize("NFKC", text)
+        normalized = normalized.replace("I", "ı").replace("İ", "i")
+        normalized = normalized.casefold()
         normalized = normalized.replace("\N{COMBINING DOT ABOVE}", "")
         normalized = re.sub(r"[^\w]+", " ", normalized, flags=re.UNICODE)
         return re.sub(r"\s+", " ", normalized).strip()

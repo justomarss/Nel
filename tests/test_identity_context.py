@@ -170,7 +170,7 @@ class IdentityContextTests(unittest.TestCase):
             def respond(prompt):
                 context = identity_context(prompt)
                 required_rules = (
-                    "Express Nel's role naturally",
+                    "Express the assistant's role naturally",
                     "possessive \"my role is\" construction",
                 )
                 if context["role"] and all(

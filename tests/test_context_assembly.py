@@ -18,7 +18,7 @@ from src.goals.repository import GoalRepositoryError
 from src.identity.models import IdentityRecord, IdentitySnapshot
 from src.context.models import FactContextSnapshot, MemoryContextSnapshot
 from src.context.assembler import canonical_json
-from src.core.nel import Nel
+from src.core.nel import Nel, SYSTEM_INSTRUCTIONS
 
 
 def identity_snapshot(preferences=(), **changes):
@@ -467,6 +467,71 @@ class ContextAssemblyTests(unittest.TestCase):
             raised.exception.reason_code,
             "system_instructions_oversized",
         )
+
+    def test_static_prompt_has_no_hardcoded_identity_name(self):
+        self.assertNotIn("You are Nel", SYSTEM_INSTRUCTIONS)
+        self.assertNotIn("Nel", SYSTEM_INSTRUCTIONS)
+
+    def test_stored_values_exist_only_inside_canonical_context(self):
+        stored_values = (
+            "Assistant Sentinel",
+            "synthetic-sentinel",
+            "Companion Sentinel Role",
+            "Preference Topic Secret",
+            "Fact Topic Secret",
+            "Goal Topic Secret",
+            "Memory Topic Secret",
+        )
+        assembler = self.assembler(
+            identity=IdentitySource(
+                identity_snapshot(
+                    display_name=stored_values[0],
+                    nature=stored_values[1],
+                    role=stored_values[2],
+                    preferences=(
+                        preference("preference_key", stored_values[3]),
+                    ),
+                )
+            ),
+            facts=FactSource(
+                facts=(FactContextSnapshot("fact_key", stored_values[4]),)
+            ),
+            goals=GoalSource(goals=(goal("goal-1", stored_values[5]),)),
+            memories=MemorySource(
+                memories=(MemoryContextSnapshot(1, None, stored_values[6]),)
+            ),
+        )
+        message = "preference topic fact key goal topic memory topic"
+        result = assembler.assemble(message)
+        nel = Nel.__new__(Nel)
+        nel.context_assembler = assembler
+        prompt = nel._conversation_prompt(message, result)
+        outside_context = prompt.replace(result.canonical_json, "", 1)
+
+        self.assertEqual(prompt.count(result.canonical_json), 1)
+        for value in stored_values:
+            with self.subTest(value=value):
+                self.assertIn(value, result.canonical_json)
+                self.assertNotIn(value, outside_context)
+
+    def test_display_name_change_only_changes_canonical_identity_data(self):
+        prompts = []
+        contexts = []
+        for display_name in ("First Sentinel Name", "Second Sentinel Name"):
+            assembler = self.assembler(
+                identity=IdentitySource(
+                    identity_snapshot(display_name=display_name)
+                )
+            )
+            result = assembler.assemble("Salam")
+            nel = Nel.__new__(Nel)
+            nel.context_assembler = assembler
+            prompt = nel._conversation_prompt("Salam", result)
+            prompts.append(prompt.replace(result.canonical_json, "", 1))
+            contexts.append(result.canonical_json)
+
+        self.assertEqual(prompts[0], prompts[1])
+        self.assertNotEqual(contexts[0], contexts[1])
 
     def test_local_fact_read_failure_is_not_reported_as_empty(self):
         nel = Nel.__new__(Nel)
