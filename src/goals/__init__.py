@@ -4,6 +4,7 @@ from src.goals.context import (
     MAX_TERMINAL_GOALS,
     GoalContextSerializer,
 )
+from src.goals.commands import GoalCommandError, GoalCommandHandler
 from src.goals.models import (
     GoalCandidate,
     GoalOwner,
@@ -26,6 +27,8 @@ from src.goals.service import GoalService
 
 __all__ = [
     "GoalCandidate",
+    "GoalCommandError",
+    "GoalCommandHandler",
     "GoalContextSerializer",
     "GoalOwner",
     "GoalPolicy",

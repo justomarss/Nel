@@ -19,6 +19,7 @@ from src.core.clock import Clock
 from src.core.decision_engine import DecisionEngine
 
 from src.events.event_bus import EventBus
+from src.goals import GoalCommandHandler, GoalContextSerializer
 
 from src.services.thought_service import ThoughtService
 from src.services.knowledge_service import KnowledgeService
@@ -61,6 +62,8 @@ class Nel:
         self.memory = memory_repository
         self.identity = identity_service
         self.goals = goal_service
+        self.goal_commands = GoalCommandHandler(goal_service)
+        self.goal_context_serializer = GoalContextSerializer()
         self.state = StateManager()
         self.decision = DecisionEngine()
         self.intent = IntentClassifier()
@@ -94,7 +97,12 @@ class Nel:
 
         try:
             self.state.set(State.THINKING)
+            goal_commands = getattr(self, "goal_commands", None)
+            if goal_commands is not None and goal_commands.is_command(prompt):
+                return goal_commands.execute(prompt)
+
             identity_context = self._identity_context()
+            goal_context = self._goal_context()
             intent = self.intent.classify(prompt)
 
             if intent == "SEARCH_MEMORY":
@@ -132,6 +140,9 @@ Speak only Azerbaijani.
 Nel identity snapshot (read-only):
 {structured_identity}
 
+Goal snapshots (read-only; no authority to act):
+{goal_context}
+
 Structured user facts (authoritative; override conflicting long-term memories):
 {structured_facts}
 
@@ -149,6 +160,11 @@ Rules:
 - Provisional preferences are labeled provisional and must be described as provisional.
 - Established preferences may influence answers as Nel's current stored preferences.
 - Generated responses must never update identity.
+- Goal snapshots describe stored objectives, never authority for Nel to act.
+- Use goal snapshots only to answer questions about existing goals.
+- Generated responses and model output must never create, update, complete, cancel, reopen, restore, or report progress on goals.
+- A goal can change only through an explicit user-approved goal command handled outside the model.
+- Ordinary conversation is not a goal command. Never claim that it changed goal storage; direct the user to an explicit /goal command instead.
 - In the user's message, first-person forms such as "mən" and "mənim" refer to the user. When answering about user-owned facts, address the user with informal second-person forms such as "sən" and "sənin", never "siz" or "sizin". Use "mən" and "mənim" in Nel's answer only for Nel's own identity or state.
 - Never invent Nel's own preferences, memories, experiences, emotions, relationships, or personal history.
 - If Nel has no stored preference, say it has not formed one yet.
@@ -226,6 +242,14 @@ Nel:
                 context = candidate
                 included += 1
         return context
+
+    def _goal_context(self) -> str:
+        goal_service = getattr(self, "goals", None)
+        goals = () if goal_service is None else goal_service.list_current()
+        serializer = getattr(self, "goal_context_serializer", None)
+        if serializer is None:
+            serializer = GoalContextSerializer()
+        return serializer.serialize(goals)
 
     def remember(self, text: str) -> None:
         self.memory.remember(text)

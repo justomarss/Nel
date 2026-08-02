@@ -22,7 +22,7 @@ from src.persistence.sqlite import SQLiteDatabase
 def identity_context(prompt: str) -> dict:
     marker = "Nel identity snapshot (read-only):\n"
     payload = prompt.split(marker, 1)[1].split(
-        "\n\nStructured user facts",
+        "\n\nGoal snapshots",
         1,
     )[0]
     return json.loads(payload)
