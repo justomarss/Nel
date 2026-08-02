@@ -33,7 +33,9 @@ def run():
                 continue
 
             try:
-                print(nel.think(text))
+                response = nel.think(text)
+                if response:
+                    print(response)
             except ApplicationError as exc:
                 print(f"Nel: {exc}")
     finally:

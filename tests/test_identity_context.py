@@ -128,8 +128,9 @@ class IdentityContextTests(unittest.TestCase):
                 if (
                     context["identity_id"] == "nel"
                     and context["display_name"] == "Nel"
-                    and context["nature"] == "artificial"
+                    and context["nature"] == "süni"
                     and context["role"]
+                    and "already rendered for Azerbaijani" in prompt
                 ):
                     return "Mən Neləm, süni rəqəmsal yoldaşam."
                 return "Naməlumdur."
@@ -145,9 +146,14 @@ class IdentityContextTests(unittest.TestCase):
             self.assertEqual(service.snapshot_calls, 1)
             self.assertEqual(context["identity_id"], "nel")
             self.assertEqual(context["display_name"], "Nel")
-            self.assertEqual(context["nature"], "artificial")
+            self.assertEqual(context["nature"], "süni")
+            self.assertEqual(service.service.snapshot().nature, "artificial")
             self.assertTrue(context["role"])
             self.assertEqual(response, "Mən Neləm, süni rəqəmsal yoldaşam.")
+            lowered = response.lower()
+            self.assertNotIn("sənətə əsaslanan", lowered)
+            self.assertNotIn("incəsənətlə bağlı", lowered)
+            self.assertNotIn("artistic", lowered)
 
     def test_role_uses_natural_azerbaijani_first_person_predicate(self):
         with tempfile.TemporaryDirectory() as directory:

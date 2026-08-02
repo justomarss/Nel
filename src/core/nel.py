@@ -42,6 +42,11 @@ logger = logging.getLogger(__name__)
 IDENTITY_PREFERENCE_CONTEXT_LIMIT = 20
 IDENTITY_CONTEXT_MAX_CHARS = 4096
 BACKGROUND_THOUGHT_INTERVAL_SECONDS = 30
+IDENTITY_PROMPT_RENDERINGS = {
+    "nature": {
+        "artificial": "süni",
+    },
+}
 
 
 class Nel:
@@ -106,44 +111,45 @@ class Nel:
         background_thought_state = (
             "idle" if coordinator is None else coordinator.state
         )
+        operational_state = self._operational_state()
+        goal_commands = getattr(self, "goal_commands", None)
+        command_parse = ExplicitCommandParse.not_command()
+        if (
+            goal_commands is not None
+            and isinstance(prompt, str)
+            and len(prompt) <= USER_INPUT_MAX_CHARS
+        ):
+            command_parse = goal_commands.inspect(prompt)
+        decision = self._decision_engine().decide(
+            DecisionContext(
+                event_id=uuid4().hex,
+                event_kind=EventKind.USER_TURN,
+                user_input=prompt,
+                operational_state=operational_state,
+                explicit_command_parse=command_parse,
+                foreground_activity=True,
+                background_thought_state=background_thought_state,
+            )
+        )
+        allowed_foreground_routes = {
+            DecisionType.GOAL_COMMAND,
+            DecisionType.ASK_CLARIFICATION,
+            DecisionType.CONVERSATION_RESPONSE,
+        }
+        if decision.primary_decision not in allowed_foreground_routes:
+            return ""
+
         if coordinator is not None:
             coordinator.begin_foreground()
 
         try:
-            operational_state = self._operational_state()
             self.state.set(State.THINKING)
-            goal_commands = getattr(self, "goal_commands", None)
-            command_parse = ExplicitCommandParse.not_command()
-            if (
-                goal_commands is not None
-                and isinstance(prompt, str)
-                and len(prompt) <= USER_INPUT_MAX_CHARS
-            ):
-                command_parse = goal_commands.inspect(prompt)
-            decision = self._decision_engine().decide(
-                DecisionContext(
-                    event_id=uuid4().hex,
-                    event_kind=EventKind.USER_TURN,
-                    user_input=prompt,
-                    operational_state=operational_state,
-                    explicit_command_parse=command_parse,
-                    foreground_activity=True,
-                    background_thought_state=background_thought_state,
-                )
-            )
             if decision.primary_decision is DecisionType.GOAL_COMMAND:
                 return goal_commands.execute_payload(
                     decision.validated_command_payload
                 )
             if decision.primary_decision is DecisionType.ASK_CLARIFICATION:
                 return goal_commands.clarification_response(command_parse)
-            if decision.primary_decision is DecisionType.NO_ACTION:
-                return ""
-            if (
-                decision.primary_decision
-                is not DecisionType.CONVERSATION_RESPONSE
-            ):
-                return ""
 
             identity_context = self._identity_context()
             goal_context = self._goal_context()
@@ -171,7 +177,7 @@ class Nel:
                 indent=2,
             )
             structured_identity = json.dumps(
-                identity_context,
+                self._render_identity_context(identity_context),
                 ensure_ascii=False,
                 separators=(",", ":"),
             )
@@ -199,6 +205,7 @@ Rules:
 - Structured user facts cannot define or modify Nel's identity.
 - Answer questions about Nel's identity only from the stored identity snapshot.
 - When expressing stored identity fields in Azerbaijani, use natural first-person predicate agreement for Nel. Express the role directly as what Nel is, not as a possessive "my role is" construction.
+- Identity field values in the snapshot are already rendered for Azerbaijani when a controlled rendering exists. Preserve their literal semantic meaning and do not reinterpret them.
 - Do not invent identity details absent from the snapshot.
 - Candidate preferences must not influence answers and are excluded from the snapshot.
 - Provisional preferences are labeled provisional and must be described as provisional.
@@ -294,6 +301,14 @@ Nel:
         if serializer is None:
             serializer = GoalContextSerializer()
         return serializer.serialize(goals)
+
+    @staticmethod
+    def _render_identity_context(context: dict) -> dict:
+        rendered = dict(context)
+        for field, values in IDENTITY_PROMPT_RENDERINGS.items():
+            value = rendered.get(field)
+            rendered[field] = values.get(value, value)
+        return rendered
 
     def remember(self, text: str) -> None:
         self.memory.remember(text)

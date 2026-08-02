@@ -71,6 +71,78 @@ class RuntimeLifecycleTests(unittest.TestCase):
 
         self.assertEqual(nel.think("hello"), "foreground reply")
 
+    def test_empty_input_never_enters_foreground_or_touches_subsystems(self):
+        class StateRecorder:
+            def __init__(self):
+                self.states = []
+
+            def get(self):
+                return State.IDLE
+
+            def set(self, state):
+                self.states.append(state)
+
+        class Coordinator:
+            state = "idle"
+
+            def begin_foreground(self):
+                raise AssertionError("foreground thought path must not run")
+
+            def end_foreground(self):
+                raise AssertionError("foreground thought path must not run")
+
+        def forbidden(*_args, **_kwargs):
+            raise AssertionError("empty input touched a subsystem")
+
+        nel = Nel.__new__(Nel)
+        nel.state = StateRecorder()
+        nel.thought_coordinator = Coordinator()
+        nel.brain = SimpleNamespace(
+            should_remember=forbidden,
+            think=forbidden,
+        )
+        nel.memory = SimpleNamespace(
+            remember=forbidden,
+            recall=forbidden,
+        )
+        nel.knowledge = SimpleNamespace(
+            answer=forbidden,
+            process=forbidden,
+            facts=forbidden,
+        )
+        nel.identity = SimpleNamespace(snapshot=forbidden)
+        nel.goals = SimpleNamespace(list_current=forbidden)
+        nel.intent = SimpleNamespace(classify=forbidden)
+
+        self.assertEqual(nel.think("   "), "")
+        self.assertEqual(nel.state.states, [])
+
+    def test_cli_does_not_print_empty_no_action_response(self):
+        class FakeNel:
+            def __init__(self):
+                self.stopped = 0
+                self.inputs = []
+
+            def think(self, text):
+                self.inputs.append(text)
+                return ""
+
+            def stop(self):
+                self.stopped += 1
+
+        fake_nel = FakeNel()
+        with (
+            patch.object(main, "create_runtime_nel", return_value=fake_nel),
+            patch("builtins.input", side_effect=["   ", "exit"]),
+            patch("builtins.print") as output,
+        ):
+            result = main.run()
+
+        self.assertEqual(result, 0)
+        self.assertEqual(fake_nel.inputs, ["   "])
+        self.assertEqual(fake_nel.stopped, 1)
+        output.assert_not_called()
+
     def test_clock_start_and_stop_are_idempotent(self):
         callback_ran = threading.Event()
         calls = []
