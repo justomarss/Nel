@@ -33,6 +33,135 @@ cannot define identity; public-product concerns are deferred.
 
 Status: Accepted.
 
+## ADR-022: Memory Audit and Retention Policy v1
+
+Context: Nel's active runtime has no `MemoryService`. `Nel.think()` calls the
+injected `SQLiteMemory` repository directly after `Brain.should_remember()`
+returns a provider-generated affirmative answer, and it does so before the
+final conversation response is generated. A successful memory judgment can
+therefore persist a user turn even when the final provider request fails. The
+root `/remember` branch also calls `Nel.remember()` directly, bypassing the
+provider judge and Decision Engine. Decision Engine controls whether ordinary
+conversation reaches this pipeline but has no memory write authority.
+
+The read-only production audit found seven raw memory events. Four are
+conversation records, two are questions, and one is an exact duplicate of a
+question. Counting by shape rather than exclusive category, three are
+question-shaped. Five originated in the historical JSON import and two were
+written later by runtime. The schema does not record route, provider outcome,
+or explicit-instruction provenance, so historical `/remember` and failed-turn
+attribution cannot be reconstructed safely. These records remain unchanged;
+their presence does not authorize cleanup.
+
+Options: retain provider-authoritative scoring; replace it with deterministic
+automatic retention rules for ordinary conversation; or disable automatic
+conversation retention and accept only explicit validated writes. Provider
+scoring grants generated text durable-state authority and has already admitted
+questions and duplicates. Deterministic automatic scoring would still require
+unsettled product rules for value, expiration, and provenance. Memory v1
+therefore accepts only explicit retention.
+
+Decision: `MemoryService` is the sole normal memory write boundary. Runtime,
+CLI, conversation, command, thought, policy, provider, and generated-output
+paths must not call `SQLiteMemory.remember()` directly. Repositories remain
+implementation details used by `MemoryService`; controlled migration, backup,
+restore, and isolated tests may access persistence through their dedicated
+administrative boundaries. `MemoryService` owns validation, duplicate checks,
+transactional write requests, and deterministic outcomes.
+
+Memory v1 permits durable writes only from:
+
+- an explicit `/remember` command containing non-empty user-supplied text;
+- a future policy decision explicitly validated and authorized for durable
+  retention. No such automatic policy is approved in v1.
+
+Ordinary conversation never becomes durable raw memory automatically.
+`Brain.should_remember()` must not decide whether a durable write occurs and
+must be removed from the active retention path. Provider success does not
+create memory. Questions, greetings, `/goal` commands, `/fact` commands, empty
+or whitespace-only input, duplicates, failed provider turns, generated text,
+and temporary thoughts must never be stored automatically. Thoughts may not
+write memory directly; accepted Thought System policy boundaries remain in
+force.
+
+The existing root `/remember` behavior must route through `MemoryService`.
+The command is local and deterministic, requires explicit non-empty text,
+makes no provider call, and returns a deterministic response for accepted,
+duplicate, empty, or failed writes. The command prefix is not stored as memory.
+The user-supplied payload remains the retained content; normalization used for
+duplicate detection must not rewrite its persisted literal value. This ADR
+does not itself add a new Decision Engine route. The current root command's
+Decision Engine bypass is an explicit implementation contradiction that must
+be resolved or separately accepted when command routing is implemented.
+
+Explicit writes are transactional. Validation and duplicate evaluation occur
+before insertion, and the accepted write commits atomically through the
+repository operation owned by `MemoryService`. A rejected or failed explicit
+write leaves memory unchanged. Provider failure always leaves memory unchanged
+because provider execution has no durable memory write path in v1.
+
+Duplicate detection for `/remember` is deterministic and provider-independent:
+
+1. normalize the candidate with Unicode NFKC;
+2. case-fold it;
+3. trim leading and trailing whitespace;
+4. collapse every Unicode whitespace run to one ASCII space;
+5. encode the normalized text as UTF-8;
+6. compute SHA-256 and reject a matching existing normalized fingerprint.
+
+Punctuation is preserved because punctuation differences may alter meaning.
+Semantic similarity and near-duplicate detection are not performed. Until a
+separate schema ADR approves a persisted fingerprint with database-enforced
+uniqueness, `MemoryService` may compare the candidate against existing memory
+through a lookup-based implementation. The lookup and insert should share one
+`BEGIN IMMEDIATE` transaction for SQLite, but this remains an application-level
+invariant: direct or external writers can bypass it, scanning cost grows with
+history, and the database cannot independently enforce uniqueness. These are
+accepted v1 limitations.
+
+The existing seven production memory events must not be deleted, archived,
+retired, rewritten, reclassified, or deduplicated under this ADR. Cleanup
+requires a separate accepted schema and retention decision, a validated backup,
+a private dry-run report, explicit approval, and transactional verification.
+
+TTL values, automatic expiration, archive storage, pruning, compression,
+semantic deduplication, provider-based retention scoring, automatic
+conversation retention, model-generated summaries as memory, and production
+cleanup are deferred. No 30-day or 90-day default is accepted. Future derived
+summaries must remain non-authoritative and must not silently replace source
+records.
+
+Implementation should proceed in the smallest reversible stages:
+
+1. Add `MemoryService` with read compatibility and explicit-write validation,
+   then inject it into `Nel` while keeping production data unchanged.
+2. Add deterministic normalization, SHA-256 lookup deduplication, and one
+   transactional explicit-write repository operation using temporary data.
+3. Route root `/remember` through `MemoryService`, reject empty payloads, and
+   return deterministic local responses without provider use.
+4. Remove `Brain.should_remember()` from ordinary conversation and verify that
+   successful and failed provider turns leave memory unchanged.
+5. Audit every runtime call site and test that Memory, Knowledge, Identity,
+   Goal, Thought, Decision, and local-intent behavior remains isolated.
+6. Propose persisted fingerprint enforcement and any cleanup mechanism in
+   separate ADRs only after v1 behavior is measured.
+
+Required tests use temporary isolated persistence and cover sole-boundary
+writes, explicit non-empty `/remember`, Unicode literal preservation,
+normalization-equivalent duplicate rejection, punctuation distinction,
+transaction rollback, no provider call for explicit memory, no ordinary
+conversation write, no write on provider failure, no command or local-read
+retention, concurrent duplicate limitations, restart continuity, and no
+production data modification.
+
+Consequences: Memory v1 favors trustworthy explicit retention over recall
+volume. It removes provider output from durable memory authority and prevents
+ordinary or failed conversations from silently accumulating raw records. It
+does not solve historical cleanup, scalable deduplication, relevance retrieval,
+or expiration. Those limitations are deliberate and reversible.
+
+Status: Accepted.
+
 ## ADR-013: Persistent Memory Architecture
 
 Context: Nel currently stores raw memories and current user facts in JSON
