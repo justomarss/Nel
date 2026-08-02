@@ -35,6 +35,7 @@ from src.goals import GoalCommandHandler, GoalContextSerializer
 from src.services.thought_service import ThoughtService
 from src.services.knowledge_service import KnowledgeService
 from src.services.fact_commands import FactCommandHandler
+from src.services.memory_service import MemoryService
 from src.thoughts import ThoughtCoordinator, ThoughtWorker
 
 from src.brain.intent_classifier import IntentClassifier
@@ -69,14 +70,21 @@ class Nel:
         raw_memory_context_limit=RAW_MEMORY_CONTEXT_LIMIT,
         enable_background_thoughts=ENABLE_BACKGROUND_THOUGHTS,
         provider=None,
+        memory_service=None,
         memory_repository=None,
         knowledge_repository=None,
         identity_service=None,
         goal_service=None,
     ):
-        if memory_repository is None or knowledge_repository is None:
+        if memory_service is not None and memory_repository is not None:
             raise ValueError(
-                "Memory and knowledge repositories must be injected."
+                "Inject either MemoryService or a memory repository, not both."
+            )
+        if memory_service is None and memory_repository is not None:
+            memory_service = MemoryService(memory_repository)
+        if memory_service is None or knowledge_repository is None:
+            raise ValueError(
+                "Memory service and knowledge repository must be injected."
             )
 
         if provider is None:
@@ -88,7 +96,7 @@ class Nel:
             )
 
         self.brain = Brain(provider)
-        self.memory = memory_repository
+        self.memory = memory_service
         self.identity = identity_service
         self.goals = goal_service
         self.goal_commands = GoalCommandHandler(goal_service)
@@ -202,9 +210,6 @@ class Nel:
 
             if intent == "REMEMBER":
                 self.knowledge.process(prompt)
-
-            if self.brain.should_remember(prompt):
-                self.memory.remember(prompt)
 
             memories = self.memory.recall(
                 limit=self.raw_memory_context_limit,
@@ -382,8 +387,8 @@ Nel:
             rendered[field] = values.get(value, value)
         return rendered
 
-    def remember(self, text: str) -> None:
-        self.memory.remember(text)
+    def remember(self, text: str):
+        return self.memory.remember_explicit(text)
 
     def _decision_engine(self) -> DecisionEngine:
         engine = getattr(self, "decision", None)

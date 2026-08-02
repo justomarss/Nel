@@ -20,6 +20,7 @@ from src.persistence.identity_migration import (
 from src.persistence.repositories import SQLiteKnowledge, SQLiteMemory
 from src.persistence.sqlite import SQLiteDatabase
 from src.services.fact_commands import FactCommandHandler
+from src.services.memory_service import MemoryService
 
 
 class FakeProvider:
@@ -105,24 +106,26 @@ class RuntimeCompositionTests(unittest.TestCase):
                 nel = create_runtime_nel(provider=FakeProvider())
             try:
                 memory = nel.memory
+                memory_repository = memory.repository
                 knowledge = nel.knowledge.knowledge
-                self.assertIsInstance(memory, SQLiteMemory)
+                self.assertIsInstance(memory, MemoryService)
+                self.assertIsInstance(memory_repository, SQLiteMemory)
                 self.assertIsInstance(knowledge, SQLiteKnowledge)
                 self.assertIsInstance(nel.identity, IdentityService)
                 self.assertIsInstance(nel.goals, GoalService)
                 self.assertIsInstance(nel.fact_commands, FactCommandHandler)
                 self.assertIs(nel.fact_commands._service, nel.knowledge)
-                self.assertIs(memory.database, knowledge.database)
+                self.assertIs(memory_repository.database, knowledge.database)
                 self.assertIs(
-                    memory.database,
+                    memory_repository.database,
                     nel.identity._repository.database,
                 )
                 self.assertIs(
-                    memory.database,
+                    memory_repository.database,
                     nel.goals._repository.database,
                 )
-                self.assertEqual(memory.database.path, path)
-                self.assertTrue(memory.database.require_existing)
+                self.assertEqual(memory_repository.database.path, path)
+                self.assertTrue(memory_repository.database.require_existing)
                 self.assertEqual(
                     nel.identity.snapshot().role,
                     IDENTITY_BOOTSTRAP["role"],

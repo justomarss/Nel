@@ -27,9 +27,10 @@ def run():
             if text == "exit":
                 break
 
-            if text.startswith("/remember "):
-                nel.remember(text[10:])
-                print("Yadda saxladım.")
+            if text == "/remember" or text.startswith("/remember "):
+                payload = "" if text == "/remember" else text[10:]
+                result = nel.remember(payload)
+                print(result.message)
                 continue
 
             try:

@@ -6,6 +6,7 @@ from src.core.nel import Nel
 from src.core.state import State
 from src.errors import ApplicationError, ProviderError
 from src.services.knowledge_service import KnowledgeService
+from src.services.memory_service import MemoryService, MemoryWriteStatus
 
 
 class FakeProvider:
@@ -80,7 +81,7 @@ class DependencyInjectionTests(unittest.TestCase):
     def test_nel_rejects_missing_persistence_repositories(self):
         with self.assertRaisesRegex(
             ValueError,
-            "Memory and knowledge repositories must be injected",
+            "Memory service and knowledge repository must be injected",
         ):
             Nel(provider=FakeProvider())
 
@@ -95,9 +96,12 @@ class DependencyInjectionTests(unittest.TestCase):
             knowledge_repository=knowledge,
         )
         try:
-            nel.remember("injected memory")
+            result = nel.remember("injected memory")
             response = nel.think("Salam")
 
+            self.assertEqual(result.status, MemoryWriteStatus.ACCEPTED)
+            self.assertIsInstance(nel.memory, MemoryService)
+            self.assertIs(nel.memory.repository, memory)
             self.assertEqual(response, "foreground reply")
             self.assertEqual(memory.items, ["injected memory"])
             self.assertIn('"name": "Ömər"', provider.prompts[-1])

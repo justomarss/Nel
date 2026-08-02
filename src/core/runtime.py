@@ -8,6 +8,7 @@ from src.identity import IdentityRepository, IdentityService
 from src.persistence.identity_migration import IDENTITY_BOOTSTRAP
 from src.persistence.repositories import SQLiteKnowledge, SQLiteMemory
 from src.persistence.sqlite import SQLiteDatabase
+from src.services.memory_service import MemoryService
 
 
 SQLITE_STARTUP_ERROR = "SQLite persistence is unavailable or invalid."
@@ -40,7 +41,7 @@ def create_runtime_nel(
         raise PersistenceStartupError(SQLITE_STARTUP_ERROR) from None
 
     arguments = {
-        "memory_repository": SQLiteMemory(database),
+        "memory_service": MemoryService(SQLiteMemory(database)),
         "knowledge_repository": SQLiteKnowledge(database),
         "identity_service": identity,
         "goal_service": goals,

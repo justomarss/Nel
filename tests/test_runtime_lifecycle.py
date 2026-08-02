@@ -279,7 +279,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
                 self.states.append(state)
 
         class TimedOutBrain:
-            def should_remember(self, text):
+            def think(self, prompt):
                 raise ProviderError(
                     "NVIDIA NIM request failed (APITimeoutError)."
                 )
