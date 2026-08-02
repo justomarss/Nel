@@ -972,3 +972,204 @@ additional goal tables or triggers. Repository, service, runtime, and backup
 support remain separate implementation stages.
 
 Status: Accepted.
+
+## ADR-020: Decision Engine v1
+
+Context: Nel needs one deterministic routing decision before any provider call
+after an input event. The current `DecisionEngine` is only a time-based
+background-thought eligibility check, while foreground routing is distributed
+through `Nel.think()`. Decision Engine v1 must establish a narrow routing
+boundary without changing the existing Memory, Knowledge, or Identity flows.
+
+Options: keep routing embedded in `Nel`; let the provider classify routes; add
+a broad candidate-routing engine for every persistent subsystem; or add a
+small deterministic engine for foreground conversation, explicit goal
+commands, and background thought starts. Embedded routing remains difficult to
+test as one decision, provider classification would grant generated output
+operational authority, and broad candidate routing would prematurely refactor
+accepted persistence behavior.
+
+Decision: Decision Engine v1 is a pure provider-independent routing layer. A
+decision is the immutable selection of exactly one primary route for one
+bounded input event. It records what route is allowed and why; it does not
+perform the route, validate persistent domain state, grant write authority, or
+represent truth, memory, identity, or permission.
+
+The only allowed primary decisions are:
+
+- `conversation_response`;
+- `ask_clarification`;
+- `goal_command`;
+- `thought_start`;
+- `no_action`.
+
+`memory_candidate`, `knowledge_candidate`, and `identity_candidate` are not
+Decision Engine v1 decisions. Their design and routing are deferred. Existing
+memory judging, knowledge extraction, and read-only identity behavior remain
+unchanged after a `conversation_response` route is selected. Decision Engine
+v1 must not refactor, replace, or bypass their current services and policies.
+
+`DecisionContext` is immutable and contains only:
+
+```text
+event_id
+event_kind
+user_input
+operational_state
+explicit_command_parse
+foreground_activity
+background_thought_state
+```
+
+`event_kind` is `user_turn` or `background_event`. `user_input` is limited to
+4,096 characters. `explicit_command_parse` is a bounded deterministic parse
+result containing only command recognition, operation, required command
+arguments, confirmation markers, and syntax status; it is limited to 4,096
+serialized characters. Identifiers and state values use fixed enums or bounded
+strings. Total serialized context is limited to 8,192 characters. Oversized or
+invalid context is rejected before routing. Full memory, user facts, Nel
+identity, goals, and provider output are excluded. A service may read the
+domain records required after its route is selected, but those records do not
+participate in route selection.
+
+`DecisionResult` is immutable and contains only:
+
+```text
+event_id
+primary_decision
+target_route
+reason_code
+validated_command_payload
+requires_confirmation
+```
+
+`validated_command_payload` is absent except for a syntactically valid explicit
+goal command. It is bounded by the command-parse limit and is not proof that a
+domain transition is valid. GoalPolicy and GoalService retain that authority.
+Reason codes are fixed machine-readable values, not generated prose. No
+confidence score, chain-of-thought, secondary candidate list, or provider
+advice is stored.
+
+Decision precedence for a `user_turn` is exactly:
+
+1. Validate the bounded context. Invalid or oversized context produces
+   `no_action` with a deterministic rejection reason.
+2. Require the foreground dispatcher to cancel or invalidate any running
+   background thought before it executes the selected route. The pure engine
+   records no cancellation side effect; late cancelled output remains
+   discarded.
+3. If `explicit_command_parse` recognizes `/goal`:
+   - a syntactically complete command with its command-level confirmation
+     markers produces `goal_command`;
+   - a malformed, incomplete, or confirmation-deficient command produces
+     `ask_clarification`.
+4. A non-empty ordinary user input produces `conversation_response`.
+   Natural-language goal statements remain ordinary conversation and cannot
+   produce `goal_command`.
+5. Empty or whitespace-only input produces `no_action`.
+
+Decision precedence for a `background_event` is exactly:
+
+1. If foreground activity exists, produce `no_action`.
+2. If a background thought is already running, produce `no_action`.
+3. If operational state is not idle, produce `no_action`.
+4. Otherwise produce `thought_start`.
+
+Background scheduling, the disabled-by-default configuration gate, and
+time-based eligibility remain outside the pure engine. They determine whether
+a background event is submitted; they do not change routing precedence.
+Foreground conversation always has priority.
+
+The correct execution flow is:
+
+```text
+input event
+-> bounded deterministic DecisionContext
+-> DecisionEngine
+-> immutable DecisionResult
+-> selected route
+-> provider only when that selected route requires it
+```
+
+No provider call may occur while constructing the context or selecting the
+route. Provider output never participates in route selection. A
+`conversation_response` may enter the existing conversation pipeline after
+selection. `ask_clarification` should use deterministic command guidance in v1
+and therefore does not require a provider. `goal_command` routes only explicit
+slash commands to GoalService. `thought_start` routes to ThoughtCoordinator.
+`no_action` invokes no provider or write service.
+
+Decision Engine has no repository access and no write authority. It cannot
+create or update goals, memories, knowledge, or identity; execute external
+actions; grant permission; retry stale goal versions; or bypass GoalPolicy.
+GoalService remains the only goal write boundary. ThoughtCoordinator retains
+single-flight and cancellation ownership. Existing Memory, Knowledge, and
+Identity services retain their current behavior and authority.
+
+Failure handling is fail-closed and route-specific. Invalid context yields
+`no_action`. Invalid explicit goal syntax or missing command confirmation yields
+`ask_clarification`. Goal policy rejection, expected-version conflict, or
+transaction failure produces the existing safe goal-command error without a
+provider fallback or alternate write. Provider failure after
+`conversation_response` produces the existing redacted application error.
+Thought start or worker failure produces a redacted diagnostic and restores a
+valid idle state. An unknown decision, unknown route, engine exception, or
+result/context mismatch executes nothing. A failure never falls back to a more
+permissive route.
+
+The smallest architecture is:
+
+```text
+User turn --------------------+
+                              v
+Background event -> DecisionContext -> DecisionEngine -> DecisionResult
+                                                      |
+                 +------------------------------------+------------------+
+                 |                 |                  |                  |
+        conversation_response  goal_command   ask_clarification   thought_start
+                 |                 |                  |                  |
+        existing Nel pipeline  GoalService   deterministic text  ThoughtCoordinator
+                 |
+          provider if needed
+
+Any rejected or ineligible route -> no_action
+```
+
+Implementation should proceed in the smallest reversible stages:
+
+1. Add frozen `DecisionContext`, decision enum, reason-code enum, and
+   `DecisionResult` with bounded validation and no runtime wiring.
+2. Implement and exhaustively test a pure `decide(context)` function using the
+   accepted precedence.
+3. Build the bounded context at the start of Nel orchestration, before any
+   provider call, and route explicit goal commands or deterministic
+   clarification through the result.
+4. Gate background thought starts through separate background-event decisions
+   while preserving the existing configuration, timing, single-flight, and
+   cancellation behavior.
+5. Run regression tests proving the current conversation, Memory, Knowledge,
+   Identity, GoalService, provider-failure, and shutdown behavior remains
+   unchanged outside the selected routing boundary.
+
+Required tests cover immutable bounded models, exact precedence, exactly one
+primary decision, no provider call during route selection, explicit `/goal`
+routing only, malformed-command clarification, natural-language goal text as
+conversation, foreground cancellation, background rejection while foreground
+or thought work is active, unknown-result rejection, fail-closed behavior, no
+repository access, and unchanged existing Memory, Knowledge, and Identity
+flows.
+
+Deferred scope includes memory candidates, knowledge candidates, identity
+candidates, natural-language goal interpretation, provider-assisted routing,
+secondary or compound decisions, durable decision history, candidate queues,
+planning, reminders, scheduling policy, external actions, permission
+escalation, autonomous goal creation, probabilistic ranking, confidence
+formulas, rewards, emotion, consciousness modeling, and self-modification.
+
+Consequences: v1 creates one narrow deterministic boundary before provider
+use and prevents provider output from selecting operational routes. It does
+not unify every existing subsystem, and ordinary conversation may continue to
+run the current memory and knowledge behavior after its route is selected.
+This limitation is intentional and keeps the first implementation reversible.
+
+Status: Accepted.
