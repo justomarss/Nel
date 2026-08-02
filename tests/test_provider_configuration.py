@@ -9,6 +9,8 @@ from unittest.mock import patch
 import main
 from src.brain.providers import NvidiaNimProvider
 from src.core.config import (
+    DEFAULT_PROVIDER,
+    GEMINI_MODEL_ID,
     DEFAULT_NVIDIA_TIMEOUT_SECONDS,
     ConfigurationError,
     load_runtime_config,
@@ -25,6 +27,8 @@ class ProviderConfigurationTests(unittest.TestCase):
     def test_runtime_modules_import_without_nvidia_configuration(self):
         environment = dict(os.environ)
         environment.update(
+            GEMINI_API_KEY="",
+            GEMINI_MODEL="",
             NVIDIA_API_KEY="",
             NVIDIA_MODEL="",
             NVIDIA_BASE_URL="",
@@ -107,6 +111,7 @@ class ProviderConfigurationTests(unittest.TestCase):
             "NVIDIA_TIMEOUT_SECONDS": "300",
         }
         configuration = load_runtime_config(valid)
+        self.assertEqual(configuration.provider_name, DEFAULT_PROVIDER)
         self.assertEqual(configuration.nvidia_timeout_seconds, 300.0)
         self.assertEqual(
             configuration.nvidia_base_url,
@@ -139,6 +144,35 @@ class ProviderConfigurationTests(unittest.TestCase):
             else 300.0,
         )
 
+    def test_gemini_configuration_is_selected_and_validated_independently(self):
+        valid = {
+            "NEL_PROVIDER": "GEMINI",
+            "GEMINI_API_KEY": "test-key",
+            "GEMINI_MODEL": GEMINI_MODEL_ID,
+            "GEMINI_TIMEOUT_SECONDS": "30",
+            "NVIDIA_TIMEOUT_SECONDS": "invalid-but-unselected",
+        }
+
+        configuration = load_runtime_config(valid)
+
+        self.assertEqual(configuration.provider_name, "gemini")
+        self.assertEqual(configuration.gemini_model, GEMINI_MODEL_ID)
+        self.assertEqual(configuration.gemini_timeout_seconds, 30.0)
+        self.assertIsNone(configuration.nvidia_api_key)
+
+        for override in (
+            {"GEMINI_API_KEY": ""},
+            {"GEMINI_MODEL": "gemini-2.5-flash-lite"},
+            {"GEMINI_TIMEOUT_SECONDS": "0"},
+            {"GEMINI_TIMEOUT_SECONDS": "invalid"},
+            {"NEL_PROVIDER": "unsupported"},
+        ):
+            with self.subTest(override=override):
+                environment = dict(valid)
+                environment.update(override)
+                with self.assertRaises(ConfigurationError):
+                    load_runtime_config(environment)
+
     def test_injected_provider_does_not_require_nvidia_credentials(self):
         configuration = load_runtime_config({}, require_provider=False)
         self.assertIsNone(configuration.nvidia_api_key)
@@ -164,6 +198,28 @@ class ProviderConfigurationTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1)
         self.assertNotIn("Traceback", result.stderr)
+        self.assertIn("Nel: Runtime configuration is invalid.", result.stderr)
+
+    def test_invalid_provider_cli_has_no_traceback_or_raw_value(self):
+        environment = dict(os.environ)
+        environment.update(
+            NEL_PROVIDER="private-invalid-provider",
+            PYTHONIOENCODING="utf-8",
+        )
+        result = subprocess.run(
+            [sys.executable, "main.py"],
+            cwd=Path(__file__).resolve().parents[1],
+            env=environment,
+            input="",
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertNotIn("private-invalid-provider", result.stderr)
         self.assertIn("Nel: Runtime configuration is invalid.", result.stderr)
 
     def test_cli_reports_provider_startup_failure_without_traceback(self):

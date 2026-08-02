@@ -125,15 +125,19 @@ Providers must expose stable capabilities for:
 - request timeout handling;
 - clear errors that do not expose credentials.
 
-The current NVIDIA NIM implementation uses an OpenAI-compatible client.
-Environment values are inert during import. Guarded runtime construction loads
-and validates required credentials, model, HTTPS/HTTP base URL, bounded
-timeout, database path, and boolean flags. Configuration failures cross one
-redacted application boundary before Nel or its clock is constructed.
+Runtime explicitly selects NVIDIA NIM or Gemini. NVIDIA uses an
+OpenAI-compatible client; Gemini uses the official Google Gen AI SDK. Both
+implement text and structured generation without provider-side conversation
+state. Environment values are inert during import. Guarded runtime
+construction validates the selected provider name, required credentials,
+model constraints, endpoint where applicable, bounded timeout, database path,
+and boolean flags. Configuration failures cross one redacted application
+boundary before Nel or its clock is constructed. Request failure never causes
+automatic fallback to the other provider.
 
-[Provisional] Define a Python protocol or abstract interface only when a
-second provider or provider-level test double makes the contract necessary.
-Provider selection should then move to configuration-driven construction.
+[Provisional] Define a formal Python protocol or abstract interface only when
+the two concrete providers demonstrate a maintenance need beyond their shared
+duck-typed generation contract.
 
 Streaming, tool calling, and multimodal operations are not current provider
 requirements.

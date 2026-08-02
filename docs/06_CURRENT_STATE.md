@@ -7,13 +7,14 @@ Baseline date: 2026-08-02
 ## Summary
 
 Nel is an early Python prototype with a command-line development shell,
-NVIDIA NIM inference, generic grounded user-fact proposals, authoritative
+explicit NVIDIA NIM or Gemini inference, generic grounded user-fact proposals, authoritative
 SQLite persistence, transient operational state, and a daemon-thread
 reflection clock.
 
-The provisional inference model is `meta/llama-3.1-70b-instruct`. Automatic
-LLM-generated background thoughts are disabled by default while foreground
-conversation and structured extraction remain active.
+NVIDIA retains its configured model support. Gemini is restricted to
+`gemini-3.5-flash-lite`. Automatic LLM-generated background thoughts are
+disabled by default while foreground conversation and structured extraction
+remain active.
 
 The v1.0 release-integrity hardening and final end-to-end acceptance audit are
 complete. A fresh schema-v4 release backup passed isolated restore and logical
@@ -24,11 +25,12 @@ publication remain explicit operator actions.
 
 - Entry point: root `main.py`
 - Composition root: `src/core/nel.py`
-- Environment: `.env` may supply NVIDIA credentials, model, endpoint, timeout,
-  and the background-thought flag. Importing modules is side-effect-safe;
+- Environment: `.env` selects `nvidia` or `gemini` and supplies only the
+  selected provider's credentials, model configuration, timeout, and the
+  background-thought flag. Importing modules is side-effect-safe;
   guarded runtime construction validates configuration and redacts failures.
-- Dependencies: exact tested versions of `openai`, Pydantic v2, and
-  `python-dotenv` are pinned; inactive `rich` was removed
+- Dependencies: exact tested versions of `google-genai`, `openai`, Pydantic
+  v2, and `python-dotenv` are pinned; inactive `rich` was removed
 - Interface: interactive CLI only
 
 ## Implemented
@@ -37,6 +39,12 @@ publication remain explicit operator actions.
 - `NvidiaNimProvider` supports text and strict JSON-schema generation,
   a 45-second interactive timeout, no SDK retries, empty-response checks,
   and redacted error messages.
+- `GeminiProvider` uses the official Google Gen AI SDK with stateless text and
+  JSON-schema generation, optional system instructions, a bounded timeout,
+  one total request attempt, empty-response checks, and redacted errors.
+- `NEL_PROVIDER` selects `nvidia` or `gemini` and defaults to `nvidia` when
+  omitted. Missing selected-provider credentials or invalid provider names
+  fail startup safely; runtime never falls back to another provider.
 - `KnowledgeExtractor` produces schema-validated temporary candidates with
   exact source and value spans. Malformed output rejects the batch without a
   repair retry.
@@ -126,7 +134,7 @@ publication remain explicit operator actions.
 | Goals | Explicit storage commands and bounded read-only conversation context are integrated; natural-language inference, planning, reminders, scheduling, actions, and autonomous creation remain absent |
 | Decision Engine | Deterministic routing covers conversation, explicit goal, fact, and memory commands, clarification, background thought starts, and no-action; natural-language write routing and knowledge or identity candidates are deferred |
 | Clock | Lifecycle is owned, but an active provider callback cannot be cancelled early |
-| Provider independence | Brain is injected, but composition hardcodes NVIDIA NIM |
+| Provider compatibility | Configuration selects NVIDIA NIM or Gemini; there is no automatic fallback or formal provider protocol |
 | Error handling | Startup, provider, expected SQLite, context-source, and background failures have redacted boundaries; unexpected programming errors remain visible during development |
 | Retrieval | Unified deterministic lexical selection is active; synonyms, paraphrases, morphology, embeddings, and semantic retrieval are absent |
 | Silence/autonomy | Reflection exists; controlled silence and topic initiation do not |
@@ -135,7 +143,6 @@ publication remain explicit operator actions.
 
 - automatic Nel preference learning or promotion;
 - semantic retrieval evaluation;
-- configuration-driven provider selection;
 - safe long-running runtime lifecycle;
 - explicit autonomy permissions;
 - stable user interface;
@@ -144,7 +151,7 @@ publication remain explicit operator actions.
 
 ## Tests
 
-The repository has 300 assertion-based `unittest` cases covering:
+The repository has 314 assertion-based `unittest` cases covering:
 
 - temporary new, correction, reactivation, and same-value fact proposals with
   no provider-authoritative durable writes;

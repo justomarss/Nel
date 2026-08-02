@@ -62,11 +62,21 @@ Startup requires an existing, validated schema-version-4 SQLite database at
 database. `NEL_DATABASE_PATH` may override the path for isolated development
 or tests, but there is no JSON runtime backend selector.
 
-Required environment variable names are:
+Provider selection is explicit:
+
+- `NEL_PROVIDER`: `nvidia` or `gemini`; defaults to `nvidia`.
+
+When NVIDIA is selected, required environment variable names are:
 
 - `NVIDIA_API_KEY`
 - `NVIDIA_MODEL`
 - `NVIDIA_BASE_URL`
+
+When Gemini is selected, configuration is:
+
+- `GEMINI_API_KEY`: required;
+- `GEMINI_MODEL`: optional only when omitted; when present it must be
+  `gemini-3.5-flash-lite`.
 
 Never print their values. Never commit `.env`.
 
@@ -76,10 +86,13 @@ Optional runtime configuration:
   `memory/nel.sqlite3`.
 - `NVIDIA_TIMEOUT_SECONDS`: provider timeout greater than zero and no more
   than 300 seconds; defaults to `45`.
+- `GEMINI_TIMEOUT_SECONDS`: provider timeout greater than zero and no more
+  than 300 seconds; defaults to `45`.
 - `ENABLE_BACKGROUND_THOUGHTS`: strict boolean; defaults to `false`.
 
 Configuration is parsed only during guarded runtime construction. Importing
 Nel modules does not require credentials or validate environment values.
+Runtime never switches providers automatically after a request failure.
 
 The current backup and isolated verification procedure is documented in the
 root [Readme](../Readme.md). `scripts/sqlite_cutover.py` is retired historical

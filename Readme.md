@@ -19,7 +19,7 @@ The model generates language, but it is not Nel's identity or source of authorit
 
 ## v1.0.0 Capabilities
 
-- Natural Azerbaijani conversation through NVIDIA NIM's OpenAI-compatible API.
+- Natural Azerbaijani conversation through configured NVIDIA NIM or Gemini inference.
 - Deterministic Decision Engine routing with exactly one primary route per event.
 - Persistent immutable core identity with read-only conversation snapshots.
 - Versioned user facts with correction, retirement, reactivation, and history.
@@ -46,7 +46,7 @@ flowchart TD
 
     KG --> CA["ContextAssembler"]
     CA -->|one canonical JSON bundle| B["Brain"]
-    B --> P["NVIDIA NIM provider"]
+    B --> P["Configured NVIDIA NIM or Gemini provider"]
 
     GC --> GS["GoalService"]
     FC --> KS["KnowledgeService"]
@@ -90,7 +90,7 @@ Each conversational provider request receives exactly one canonical JSON object 
 
 ### Provider Independence
 
-Nel's state and policies do not belong to a model provider. `Brain` accepts an injected provider with text and structured-generation capabilities. The current production composition constructs NVIDIA NIM directly, so configuration-driven provider selection is not yet implemented; provider substitution is nevertheless tested through injected fakes without resetting state.
+Nel's state and policies do not belong to a model provider. `Brain` accepts an injected provider with text and structured-generation capabilities. Runtime selects NVIDIA NIM or Gemini from explicit configuration without moving conversation state into either SDK. Provider errors never trigger an automatic fallback or provider switch.
 
 ## Persistence: SQLite Schema v4
 
@@ -114,6 +114,7 @@ Persistence guarantees include explicit transactions, direct current-state recor
 - Windows
 - Python **3.14.5**
 - SQLite supplied by Python's standard library
+- `google-genai==2.13.0`
 - `openai==2.52.0`
 - `pydantic==2.13.4`
 - `python-dotenv==1.2.2`
@@ -143,17 +144,25 @@ The default path is `memory/nel.sqlite3`. `NEL_DATABASE_PATH` may select another
 Create a local `.env` file using placeholders and replace them only on your machine:
 
 ```dotenv
+NEL_PROVIDER=<nvidia-or-gemini>
+
+# Required when NEL_PROVIDER=nvidia
 NVIDIA_API_KEY=<your-nvidia-api-key>
 NVIDIA_MODEL=<your-nvidia-model-id>
 NVIDIA_BASE_URL=<your-openai-compatible-nim-base-url>
 
+# Required when NEL_PROVIDER=gemini
+GEMINI_API_KEY=<your-gemini-api-key>
+GEMINI_MODEL=<must-be-gemini-3.5-flash-lite>
+
 # Optional
 NVIDIA_TIMEOUT_SECONDS=45
+GEMINI_TIMEOUT_SECONDS=45
 ENABLE_BACKGROUND_THOUGHTS=false
 NEL_DATABASE_PATH=memory/nel.sqlite3
 ```
 
-Never commit `.env`. Configuration is parsed only during guarded runtime construction. Missing or malformed required settings produce a redacted startup error; importing local modules does not require credentials.
+`NEL_PROVIDER` accepts `nvidia` or `gemini` and defaults explicitly to `nvidia` when omitted. Gemini defaults to and accepts the stable model ID `gemini-3.5-flash-lite`. Only the selected provider's credentials are required. Never commit `.env`. Configuration is parsed only during guarded runtime construction. Missing or malformed selected-provider settings produce a redacted startup error; importing local modules does not require credentials.
 
 ## Start Nel
 
@@ -247,7 +256,10 @@ Never SQL down-migrate. After any new write, rollback to an older backup necessa
 
 ## Tests
 
-The accepted v1.0.0 repository contains **300 assertion-based `unittest` tests**. Tests use temporary databases and protect production data by hash.
+The current repository contains **314 assertion-based `unittest` tests**. The
+v1.0.0 acceptance baseline contained 300 tests; this post-v1 provider update
+adds compatibility coverage. Tests use temporary databases and protect
+production data by hash.
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
@@ -271,7 +283,7 @@ Nel is local-first, not local-only: configured cloud inference sends the bounded
 ## Known Limitations
 
 - The CLI is a development shell, not the intended final interface.
-- Runtime composition currently selects NVIDIA NIM directly and has no automatic provider fallback.
+- Runtime supports explicit NVIDIA NIM or Gemini selection and has no automatic provider fallback.
 - Provider latency and availability vary; failures are graceful but conversation may be unavailable.
 - Context relevance is deterministic lexical matching and can miss paraphrases, synonyms, or Azerbaijani morphological variants.
 - The 12,000-character context ceiling is not a provider-token guarantee.
@@ -285,7 +297,7 @@ Nel is local-first, not local-only: configured cloud inference sends the bounded
 
 Already documented post-stable directions include:
 
-- configuration-driven provider construction and a formal provider capability contract;
+- a formal provider capability protocol if additional implementations require it;
 - measured retrieval improvements only when lexical relevance proves insufficient;
 - longer-running runtime and resource validation;
 - controlled preference formation and explicitly permissioned proactive behavior;

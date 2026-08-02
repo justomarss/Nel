@@ -1,6 +1,6 @@
 import sqlite3
 
-from src.brain.providers import NvidiaNimProvider
+from src.brain.providers import GeminiProvider, NvidiaNimProvider
 from src.core.config import ConfigurationError, load_runtime_config
 from src.core.nel import Nel
 from src.errors import (
@@ -38,12 +38,19 @@ def create_runtime_nel(
             else database_path
         )
         if provider is None:
-            provider = NvidiaNimProvider(
-                model=configuration.nvidia_model,
-                api_key=configuration.nvidia_api_key,
-                base_url=configuration.nvidia_base_url,
-                timeout=configuration.nvidia_timeout_seconds,
-            )
+            if configuration.provider_name == "gemini":
+                provider = GeminiProvider(
+                    model=configuration.gemini_model,
+                    api_key=configuration.gemini_api_key,
+                    timeout=configuration.gemini_timeout_seconds,
+                )
+            else:
+                provider = NvidiaNimProvider(
+                    model=configuration.nvidia_model,
+                    api_key=configuration.nvidia_api_key,
+                    base_url=configuration.nvidia_base_url,
+                    timeout=configuration.nvidia_timeout_seconds,
+                )
     except (ConfigurationError, ProviderError):
         raise ApplicationError("Runtime configuration is invalid.") from None
 

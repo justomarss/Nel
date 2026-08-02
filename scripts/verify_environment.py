@@ -11,11 +11,13 @@ if str(PROJECT_ROOT) not in sys.path:
 
 SUPPORTED_PYTHON = (3, 14)
 REQUIRED_PACKAGES = {
+    "google-genai": "2.13.0",
     "openai": "2.52.0",
     "pydantic": "2.13.4",
     "python-dotenv": "1.2.2",
 }
 IMPORT_NAMES = {
+    "google-genai": "google.genai",
     "openai": "openai",
     "pydantic": "pydantic",
     "python-dotenv": "dotenv",

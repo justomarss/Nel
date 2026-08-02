@@ -9,7 +9,7 @@ from scripts.verify_environment import verify_environment
 class EnvironmentVerificationTests(unittest.TestCase):
     def test_active_environment_matches_pinned_dependencies(self):
         statuses = verify_environment()
-        self.assertEqual(len(statuses), 3)
+        self.assertEqual(len(statuses), 4)
 
     def test_verifier_runs_without_provider_credentials(self):
         environment = {
@@ -30,6 +30,7 @@ class EnvironmentVerificationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("PASS environment_verification", result.stdout)
         self.assertNotIn("NVIDIA_API_KEY", result.stdout)
+        self.assertNotIn("GEMINI_API_KEY", result.stdout)
 
 
 if __name__ == "__main__":

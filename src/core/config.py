@@ -8,7 +8,10 @@ from dotenv import load_dotenv
 
 
 DEFAULT_DATABASE_PATH = Path("memory/nel.sqlite3")
+DEFAULT_PROVIDER = "nvidia"
 DEFAULT_NVIDIA_TIMEOUT_SECONDS = 45.0
+DEFAULT_GEMINI_TIMEOUT_SECONDS = 45.0
+GEMINI_MODEL_ID = "gemini-3.5-flash-lite"
 MAX_NVIDIA_TIMEOUT_SECONDS = 300.0
 ENABLE_BACKGROUND_THOUGHTS = False
 NVIDIA_INTERACTIVE_TIMEOUT_SECONDS = DEFAULT_NVIDIA_TIMEOUT_SECONDS
@@ -22,10 +25,14 @@ class ConfigurationError(ValueError):
 class RuntimeConfig:
     database_path: Path
     enable_background_thoughts: bool
+    provider_name: str
     nvidia_api_key: str | None
     nvidia_model: str | None
     nvidia_base_url: str | None
     nvidia_timeout_seconds: float
+    gemini_api_key: str | None
+    gemini_model: str
+    gemini_timeout_seconds: float
 
 
 def _optional_text(environment, name: str) -> str | None:
@@ -80,6 +87,14 @@ def _database_path(environment) -> Path:
     return Path(raw_value.strip())
 
 
+def _provider_name(environment) -> str:
+    value = _optional_text(environment, "NEL_PROVIDER") or DEFAULT_PROVIDER
+    normalized = value.casefold()
+    if normalized not in {"gemini", "nvidia"}:
+        raise ConfigurationError("Runtime provider selection is invalid.")
+    return normalized
+
+
 def _provider_url(environment) -> str:
     value = _required_text(environment, "NVIDIA_BASE_URL")
     parsed = urlsplit(value)
@@ -107,21 +122,39 @@ def load_runtime_config(
             raise ConfigurationError("Runtime configuration is unavailable.") from None
         environment = os.environ
 
-    api_key = _optional_text(environment, "NVIDIA_API_KEY")
-    model = _optional_text(environment, "NVIDIA_MODEL")
-    base_url = _optional_text(environment, "NVIDIA_BASE_URL")
-    timeout = _timeout(
-        environment,
-        "NVIDIA_TIMEOUT_SECONDS",
-        DEFAULT_NVIDIA_TIMEOUT_SECONDS,
+    provider_name = _provider_name(environment)
+    nvidia_api_key = _optional_text(environment, "NVIDIA_API_KEY")
+    nvidia_model = _optional_text(environment, "NVIDIA_MODEL")
+    nvidia_base_url = _optional_text(environment, "NVIDIA_BASE_URL")
+    gemini_api_key = _optional_text(environment, "GEMINI_API_KEY")
+    gemini_model = (
+        _optional_text(environment, "GEMINI_MODEL") or GEMINI_MODEL_ID
     )
+    nvidia_timeout = DEFAULT_NVIDIA_TIMEOUT_SECONDS
+    gemini_timeout = DEFAULT_GEMINI_TIMEOUT_SECONDS
 
-    if require_provider:
-        api_key = _required_text(environment, "NVIDIA_API_KEY")
-        model = _required_text(environment, "NVIDIA_MODEL")
-        if len(model) > 256:
+    if provider_name == "nvidia":
+        nvidia_timeout = _timeout(
+            environment,
+            "NVIDIA_TIMEOUT_SECONDS",
+            DEFAULT_NVIDIA_TIMEOUT_SECONDS,
+        )
+        if require_provider:
+            nvidia_api_key = _required_text(environment, "NVIDIA_API_KEY")
+            nvidia_model = _required_text(environment, "NVIDIA_MODEL")
+            if len(nvidia_model) > 256:
+                raise ConfigurationError("Runtime provider model is invalid.")
+            nvidia_base_url = _provider_url(environment)
+    else:
+        gemini_timeout = _timeout(
+            environment,
+            "GEMINI_TIMEOUT_SECONDS",
+            DEFAULT_GEMINI_TIMEOUT_SECONDS,
+        )
+        if gemini_model != GEMINI_MODEL_ID:
             raise ConfigurationError("Runtime provider model is invalid.")
-        base_url = _provider_url(environment)
+        if require_provider:
+            gemini_api_key = _required_text(environment, "GEMINI_API_KEY")
 
     return RuntimeConfig(
         database_path=_database_path(environment),
@@ -130,8 +163,12 @@ def load_runtime_config(
             "ENABLE_BACKGROUND_THOUGHTS",
             False,
         ),
-        nvidia_api_key=api_key,
-        nvidia_model=model,
-        nvidia_base_url=base_url,
-        nvidia_timeout_seconds=timeout,
+        provider_name=provider_name,
+        nvidia_api_key=nvidia_api_key,
+        nvidia_model=nvidia_model,
+        nvidia_base_url=nvidia_base_url,
+        nvidia_timeout_seconds=nvidia_timeout,
+        gemini_api_key=gemini_api_key,
+        gemini_model=gemini_model,
+        gemini_timeout_seconds=gemini_timeout,
     )
