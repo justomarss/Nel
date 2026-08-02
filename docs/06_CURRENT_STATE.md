@@ -43,11 +43,11 @@ yet meet the first-stable criteria.
   second-person answers while Nel-owned identity remains first-person.
 - Runtime Memory and Knowledge use one shared, guarded SQLite database at
   `memory/nel.sqlite3` by default.
-- Runtime code requires an existing integrity-checked schema-version-3
+- Runtime code requires an existing integrity-checked schema-version-4
   database with exactly the eight approved persistence tables, the goal index,
-  and identity immutability triggers. It never migrates or creates a production
-  database at startup. The controlled production migration to schema version 3
-  is complete.
+  identity immutability triggers, and fact-retirement columns. It never
+  migrates or creates a production database at startup. Production remains on
+  schema version 3 until the controlled v3-to-v4 migration is executed.
 - Identity v1 storage and runtime composition are implemented. The controlled
   production migration to schema version 2 is complete.
 - Runtime Memory, Knowledge, Identity, and Goal services share one guarded
@@ -57,6 +57,9 @@ yet meet the first-stable criteria.
   before provider invocation. GoalService remains the write boundary, all
   updates use expected versions, and completion, progress, reopen, and restore
   operations enforce their accepted confirmation rules.
+- Fact inspection, correction, history, and retirement are routed locally
+  through explicit `/fact` commands and `KnowledgeService`; runtime activation
+  is blocked until the controlled production schema-v4 migration.
 - Decision Engine v1 uses immutable bounded contexts and results to select
   exactly one deterministic foreground or background route before any provider
   call. It has no repository or write access, and provider output cannot affect
@@ -90,12 +93,12 @@ yet meet the first-stable criteria.
 | Capability | Current limitation |
 |---|---|
 | Memory | Raw long-term strings; only a bounded newest subset is sent, without relevance scoring |
-| Knowledge | Current values and superseded history are transactional; provenance beyond version history is not implemented |
+| Knowledge | Current values, superseded history, and versioned retirement are transactional; provenance beyond revision reasons is not implemented |
 | Intent classification | Keyword rules; narrow and not robustly tested |
 | State | Operational state is an in-memory enum; persistent Nel identity is stored separately and is read into prompts without a conversation write path |
 | Thoughts | Minimal in-memory typed observation pipeline is wired; policies reject permanent changes and automatic generation remains disabled by default |
 | Goals | Explicit storage commands and bounded read-only conversation context are integrated; natural-language inference, planning, reminders, scheduling, actions, and autonomous creation remain absent |
-| Decision Engine | Deterministic v1 routing covers conversation, goal commands, clarification, background thought starts, and no-action; memory, knowledge, and identity candidate routing is deferred |
+| Decision Engine | Deterministic routing covers conversation, explicit goal and fact commands, clarification, background thought starts, and no-action; natural-language write routing and memory, knowledge, and identity candidates are deferred |
 | Clock | Lifecycle is owned, but an active provider callback cannot be cancelled early |
 | Provider independence | Brain is injected, but composition hardcodes NVIDIA NIM |
 | Error handling | Provider and background failures are bounded; startup persistence failures are redacted, while operational write failures need broader application handling |
@@ -115,7 +118,7 @@ yet meet the first-stable criteria.
 
 ## Tests
 
-The repository has 190 assertion-based `unittest` cases covering:
+The repository has 219 assertion-based `unittest` cases covering:
 
 - user favorite update from an older to newer value;
 - literal value preservation for different fact domains;
@@ -147,6 +150,9 @@ The repository has 190 assertion-based `unittest` cases covering:
 - immutable bounded decision models, exact foreground and background
   precedence, fail-closed routing, and provider/repository exclusion from route
   selection.
+- schema-v4 fact retirement, reactivation, history continuity, backup and
+  restore validation, interrogative extraction rejection, and deterministic
+  provider-free `/fact` routing.
 
 `tests/test_event.py` is a print-based EventBus smoke script, not an
 assertion-based test.

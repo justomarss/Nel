@@ -18,6 +18,7 @@ class DecisionType(str, Enum):
     CONVERSATION_RESPONSE = "conversation_response"
     ASK_CLARIFICATION = "ask_clarification"
     GOAL_COMMAND = "goal_command"
+    FACT_COMMAND = "fact_command"
     THOUGHT_START = "thought_start"
     NO_ACTION = "no_action"
 
@@ -39,6 +40,10 @@ class DecisionReason(str, Enum):
     GOAL_COMMAND_REQUIRES_CLARIFICATION = (
         "goal_command_requires_clarification"
     )
+    CONFIRMED_FACT_COMMAND = "confirmed_fact_command"
+    FACT_COMMAND_REQUIRES_CLARIFICATION = (
+        "fact_command_requires_clarification"
+    )
     ORDINARY_USER_INPUT = "ordinary_user_input"
     EMPTY_USER_INPUT = "empty_user_input"
     FOREGROUND_ACTIVE = "foreground_active"
@@ -52,6 +57,7 @@ class ExplicitCommandParse:
     status: GoalCommandParseStatus = GoalCommandParseStatus.NOT_COMMAND
     operation: str | None = None
     arguments: tuple[str, ...] = ()
+    command_kind: str | None = None
 
     @classmethod
     def not_command(cls):
@@ -64,6 +70,7 @@ class ExplicitCommandParse:
                     "status": getattr(self.status, "value", self.status),
                     "operation": self.operation,
                     "arguments": self.arguments,
+                    "command_kind": self.command_kind,
                 },
                 ensure_ascii=False,
                 separators=(",", ":"),
@@ -88,6 +95,7 @@ _TARGETS = {
     DecisionType.CONVERSATION_RESPONSE: "conversation_flow",
     DecisionType.ASK_CLARIFICATION: "deterministic_clarification",
     DecisionType.GOAL_COMMAND: "goal_command_handler",
+    DecisionType.FACT_COMMAND: "fact_command_handler",
     DecisionType.THOUGHT_START: "thought_coordinator",
     DecisionType.NO_ACTION: "none",
 }
@@ -97,9 +105,13 @@ _REASONS = {
     },
     DecisionType.ASK_CLARIFICATION: {
         DecisionReason.GOAL_COMMAND_REQUIRES_CLARIFICATION,
+        DecisionReason.FACT_COMMAND_REQUIRES_CLARIFICATION,
     },
     DecisionType.GOAL_COMMAND: {
         DecisionReason.CONFIRMED_GOAL_COMMAND,
+    },
+    DecisionType.FACT_COMMAND: {
+        DecisionReason.CONFIRMED_FACT_COMMAND,
     },
     DecisionType.THOUGHT_START: {
         DecisionReason.BACKGROUND_ELIGIBLE,
@@ -132,11 +144,14 @@ class DecisionResult:
             raise ValueError("Decision reason is invalid.")
         if self.reason_code not in _REASONS[self.primary_decision]:
             raise ValueError("Decision reason does not match its type.")
-        if self.primary_decision is DecisionType.GOAL_COMMAND:
+        if self.primary_decision in {
+            DecisionType.GOAL_COMMAND,
+            DecisionType.FACT_COMMAND,
+        }:
             if not self.validated_command_payload:
-                raise ValueError("Goal command payload is required.")
+                raise ValueError("Command payload is required.")
         elif self.validated_command_payload is not None:
-            raise ValueError("Only goal commands may carry command payload.")
+            raise ValueError("Only explicit commands may carry a payload.")
         if self.requires_confirmation is not (
             self.primary_decision is DecisionType.ASK_CLARIFICATION
         ):
@@ -158,6 +173,13 @@ class DecisionEngine:
     def _decide_user_turn(self, context: DecisionContext) -> DecisionResult:
         command = context.explicit_command_parse
         if command.status is GoalCommandParseStatus.CONFIRMED:
+            if command.command_kind == "fact":
+                return self._result(
+                    context,
+                    DecisionType.FACT_COMMAND,
+                    DecisionReason.CONFIRMED_FACT_COMMAND,
+                    payload=command.arguments,
+                )
             return self._result(
                 context,
                 DecisionType.GOAL_COMMAND,
@@ -165,10 +187,15 @@ class DecisionEngine:
                 payload=command.arguments,
             )
         if command.status is GoalCommandParseStatus.CLARIFICATION_REQUIRED:
+            reason = (
+                DecisionReason.FACT_COMMAND_REQUIRES_CLARIFICATION
+                if command.command_kind == "fact"
+                else DecisionReason.GOAL_COMMAND_REQUIRES_CLARIFICATION
+            )
             return self._result(
                 context,
                 DecisionType.ASK_CLARIFICATION,
-                DecisionReason.GOAL_COMMAND_REQUIRES_CLARIFICATION,
+                reason,
                 requires_confirmation=True,
             )
         if context.user_input.strip():
@@ -258,13 +285,16 @@ class DecisionEngine:
         if (
             not isinstance(command.status, GoalCommandParseStatus)
             or (command.operation is not None and not isinstance(command.operation, str))
+            or command.command_kind not in {None, "goal", "fact"}
             or not isinstance(command.arguments, tuple)
             or any(not isinstance(value, str) for value in command.arguments)
             or command.serialized_length() > COMMAND_PARSE_MAX_CHARS
         ):
             return False
         if command.status is GoalCommandParseStatus.NOT_COMMAND and (
-            command.operation is not None or command.arguments
+            command.operation is not None
+            or command.arguments
+            or command.command_kind is not None
         ):
             return False
         if command.status is GoalCommandParseStatus.CONFIRMED and (
@@ -282,6 +312,7 @@ class DecisionEngine:
                         "status": command.status.value,
                         "operation": command.operation,
                         "arguments": command.arguments,
+                        "command_kind": command.command_kind,
                     },
                     "foreground_activity": context.foreground_activity,
                     "background_thought_state": context.background_thought_state,

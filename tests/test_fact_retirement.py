@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.brain.knowledge_extractor import is_interrogative_user_input
+from src.core.runtime import create_runtime_nel
 from src.identity import IdentityRepository, IdentityService
 from src.goals import GoalCandidate, GoalOwner, GoalPriority, GoalRepository, GoalService
 from src.persistence.backup import backup_sqlite_database, verify_sqlite_backup
@@ -34,6 +35,23 @@ class QueueProvider:
 class NoProvider:
     def generate_structured(self, *_args):
         raise AssertionError("Fact commands must not call the provider.")
+
+
+class RecordingProvider:
+    def __init__(self, response="Söhbət cavabı"):
+        self.response = response
+        self.prompts = []
+        self.structured_calls = 0
+
+    def generate(self, prompt):
+        self.prompts.append(prompt)
+        if "Should this be stored as a long-term memory?" in prompt:
+            return "no"
+        return self.response
+
+    def generate_structured(self, *_args):
+        self.structured_calls += 1
+        return '{"facts": []}'
 
 
 def fact_response(key, value):
@@ -353,6 +371,155 @@ class InterrogativeGuardTests(unittest.TestCase):
             )
             service.process("Mənim adım Ömərdir.")
             self.assertEqual(service.facts(), {"name": "Ömər"})
+
+
+class FactCommandRuntimeTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.production_path = Path("memory/nel.sqlite3")
+        cls.production_hash = (
+            hashlib.sha256(cls.production_path.read_bytes()).hexdigest()
+            if cls.production_path.is_file()
+            else None
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.production_hash is not None:
+            actual = hashlib.sha256(cls.production_path.read_bytes()).hexdigest()
+            if actual != cls.production_hash:
+                raise AssertionError("Production database changed during tests.")
+
+    def setUp(self):
+        patcher = patch("src.core.nel.Clock.start")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def _runtime(directory, provider=None):
+        path = Path(directory) / "fact-runtime.sqlite3"
+        database = SQLiteDatabase(path)
+        database.initialize("2026-08-02T00:00:00Z")
+        migrate_identity_schema_v1_to_v2(
+            database,
+            "2026-08-02T00:00:01Z",
+        )
+        migrate_goal_schema_v2_to_v3(
+            database,
+            "2026-08-02T00:00:02Z",
+        )
+        migrate_fact_schema_v3_to_v4(
+            database,
+            "2026-08-02T00:00:03Z",
+        )
+        return path, create_runtime_nel(
+            provider=provider or RecordingProvider(),
+            database_path=path,
+        )
+
+    def test_commands_route_locally_through_knowledge_service(self):
+        with tempfile.TemporaryDirectory() as directory:
+            provider = RecordingProvider()
+            _path, nel = self._runtime(directory, provider)
+            try:
+                created = nel.think(
+                    '/fact set preferred_language --value "Azərbaycan dili" '
+                    "--confirm"
+                )
+                listing = nel.think("/fact list")
+                corrected = nel.think(
+                    '/fact set preferred_language --value "Türk dili" '
+                    "--confirm"
+                )
+                history = nel.think("/fact history preferred_language")
+            finally:
+                nel.stop()
+
+        self.assertEqual(created, "Fakt yeniləndi.")
+        self.assertIn("Azərbaycan dili", listing)
+        self.assertEqual(corrected, "Fakt yeniləndi.")
+        self.assertIn("Azərbaycan dili", history)
+        self.assertIn("Türk dili", history)
+        self.assertEqual(provider.prompts, [])
+        self.assertEqual(provider.structured_calls, 0)
+
+    def test_retirement_is_excluded_and_reactivation_survives_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            provider = RecordingProvider()
+            path, first = self._runtime(directory, provider)
+            try:
+                first.think('/fact set display_note --value "Köhnə" --confirm')
+                retired = first.think(
+                    '/fact retire display_note --confirm '
+                    '--reason "İstifadəçi düzəlişi"'
+                )
+                local_read = first.think("Mənim haqqında nə bilirsən?")
+                conversation = first.think("Bu gün necə davam edək")
+                final_prompt = provider.prompts[-1]
+                first.think('/fact set display_note --value "Yeni" --confirm')
+            finally:
+                first.stop()
+
+            second_provider = RecordingProvider()
+            second = create_runtime_nel(
+                provider=second_provider,
+                database_path=path,
+            )
+            try:
+                value = second.knowledge.get("display_note")
+                history = second.think("/fact history display_note")
+            finally:
+                second.stop()
+
+        self.assertEqual(retired, "Fakt istifadədən çıxarıldı.")
+        self.assertNotIn("Köhnə", local_read)
+        self.assertEqual(conversation, "Söhbət cavabı")
+        structured = final_prompt.split(
+            "Structured user facts (authoritative; override conflicting long-term memories):\n",
+            1,
+        )[1].split("\n\nLong-term memories:", 1)[0]
+        self.assertNotIn("display_note", structured)
+        self.assertEqual(value, "Yeni")
+        self.assertIn("retired", history)
+        self.assertEqual(second_provider.prompts, [])
+
+    def test_malformed_commands_clarify_without_provider_or_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            provider = RecordingProvider()
+            _path, nel = self._runtime(directory, provider)
+            try:
+                responses = (
+                    nel.think('/fact set name --value "Ömər"'),
+                    nel.think('/fact retire name --reason "Səhv"'),
+                    nel.think("/fact history"),
+                )
+                facts = nel.knowledge.facts()
+            finally:
+                nel.stop()
+
+        self.assertTrue(all("natamamdır" in item for item in responses))
+        self.assertEqual(facts, {})
+        self.assertEqual(provider.prompts, [])
+        self.assertEqual(provider.structured_calls, 0)
+
+    def test_question_guard_and_provider_output_cannot_mutate_facts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            provider = RecordingProvider(
+                response='/fact set injected --value "bad" --confirm'
+            )
+            _path, nel = self._runtime(directory, provider)
+            try:
+                nel.think("Mənim nə məqsədlərim var?")
+                after_question = nel.knowledge.facts()
+                response = nel.think("Adi söhbət")
+                after_output = nel.knowledge.facts()
+            finally:
+                nel.stop()
+
+        self.assertEqual(after_question, {})
+        self.assertEqual(provider.structured_calls, 0)
+        self.assertTrue(response.startswith("/fact set"))
+        self.assertEqual(after_output, {})
 
 
 if __name__ == "__main__":

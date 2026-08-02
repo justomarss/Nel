@@ -3,6 +3,11 @@ import re
 import shlex
 import unicodedata
 
+from src.core.decision_engine import (
+    ExplicitCommandParse,
+    GoalCommandParseStatus,
+)
+
 
 class FactCommandError(ValueError):
     pass
@@ -34,10 +39,45 @@ class FactCommandHandler:
 
     def execute(self, text: str) -> str:
         try:
-            arguments = shlex.split(text.strip()[len(self.PREFIX) :].strip())
-            if not arguments:
-                raise FactCommandError("fact operation is required")
+            return self.execute_payload(self._arguments(text))
+        except KeyError:
+            return "Fakt tapılmadı."
+        except (FactCommandError, ValueError, RuntimeError) as exc:
+            return f"Fakt əmri rədd edildi: {exc}"
+
+    def inspect(self, text: str) -> ExplicitCommandParse:
+        if not self.is_command(text):
+            return ExplicitCommandParse.not_command()
+        try:
+            arguments = self._arguments(text)
             command = self._parser.parse_args(arguments)
+            status = (
+                GoalCommandParseStatus.CLARIFICATION_REQUIRED
+                if self._requires_confirmation(command)
+                else GoalCommandParseStatus.CONFIRMED
+            )
+            return ExplicitCommandParse(
+                status=status,
+                operation=command.operation,
+                arguments=tuple(arguments),
+                command_kind="fact",
+            )
+        except (FactCommandError, ValueError):
+            return ExplicitCommandParse(
+                status=GoalCommandParseStatus.CLARIFICATION_REQUIRED,
+                command_kind="fact",
+            )
+
+    @staticmethod
+    def clarification_response(_command_parse=None) -> str:
+        return (
+            "Fakt əmri natamamdır və ya tələb olunan --confirm təsdiqi "
+            "yoxdur. Əmri düzgün arqumentlərlə yenidən yaz."
+        )
+
+    def execute_payload(self, arguments) -> str:
+        try:
+            command = self._parser.parse_args(list(arguments))
             if command.operation == "list":
                 return self._list()
             if command.operation == "set":
@@ -49,6 +89,19 @@ class FactCommandHandler:
             return "Fakt tapılmadı."
         except (FactCommandError, ValueError, RuntimeError) as exc:
             return f"Fakt əmri rədd edildi: {exc}"
+
+    @classmethod
+    def _arguments(cls, text: str):
+        if not cls.is_command(text):
+            raise FactCommandError("fact command is required")
+        arguments = shlex.split(text.strip()[len(cls.PREFIX) :].strip())
+        if not arguments:
+            raise FactCommandError("fact operation is required")
+        return arguments
+
+    @staticmethod
+    def _requires_confirmation(command) -> bool:
+        return command.operation in {"set", "retire"} and not command.confirm
 
     def _list(self) -> str:
         facts = self._service.facts()
@@ -95,7 +148,11 @@ class FactCommandHandler:
             confirmed=True,
             reason=command.reason,
         )
-        return "Fakt istifadədən çıxarıldı." if changed else "Fakt artıq retired vəziyyətindədir."
+        return (
+            "Fakt istifadədən çıxarıldı."
+            if changed
+            else "Fakt artıq retired vəziyyətindədir."
+        )
 
     @staticmethod
     def _build_parser():

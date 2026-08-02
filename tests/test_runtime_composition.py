@@ -12,12 +12,14 @@ from src.errors import ApplicationError, PersistenceStartupError, ProviderError
 from src.goals import GoalCandidate, GoalOwner, GoalService
 from src.identity import IdentityService
 from src.persistence.goal_migration import migrate_goal_schema_v2_to_v3
+from src.persistence.fact_migration import migrate_fact_schema_v3_to_v4
 from src.persistence.identity_migration import (
     IDENTITY_BOOTSTRAP,
     migrate_identity_schema_v1_to_v2,
 )
 from src.persistence.repositories import SQLiteKnowledge, SQLiteMemory
 from src.persistence.sqlite import SQLiteDatabase
+from src.services.fact_commands import FactCommandHandler
 
 
 class FakeProvider:
@@ -65,11 +67,19 @@ class RuntimeCompositionTests(unittest.TestCase):
         )
         return path, database
 
-    def _database(self, directory, name="nel.sqlite3"):
+    def _v3_database(self, directory, name="nel.sqlite3"):
         path, database = self._v2_database(directory, name)
         migrate_goal_schema_v2_to_v3(
             database,
             "2026-08-02T02:00:00Z",
+        )
+        return path, database
+
+    def _database(self, directory, name="nel.sqlite3"):
+        path, database = self._v3_database(directory, name)
+        migrate_fact_schema_v3_to_v4(
+            database,
+            "2026-08-02T03:00:00Z",
         )
         return path, database
 
@@ -88,7 +98,7 @@ class RuntimeCompositionTests(unittest.TestCase):
         )
 
     @patch("src.core.nel.Clock.start")
-    def test_default_runtime_uses_schema_v3_sqlite_only(self, _clock_start):
+    def test_default_runtime_uses_schema_v4_sqlite_only(self, _clock_start):
         with tempfile.TemporaryDirectory() as directory:
             path, _database = self._database(directory)
             with patch("src.core.runtime.NEL_DATABASE_PATH", path):
@@ -100,6 +110,8 @@ class RuntimeCompositionTests(unittest.TestCase):
                 self.assertIsInstance(knowledge, SQLiteKnowledge)
                 self.assertIsInstance(nel.identity, IdentityService)
                 self.assertIsInstance(nel.goals, GoalService)
+                self.assertIsInstance(nel.fact_commands, FactCommandHandler)
+                self.assertIs(nel.fact_commands._service, nel.knowledge)
                 self.assertIs(memory.database, knowledge.database)
                 self.assertIs(
                     memory.database,
@@ -136,6 +148,21 @@ class RuntimeCompositionTests(unittest.TestCase):
     def test_schema_v2_production_startup_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path, _database = self._v2_database(directory)
+
+            with self.assertRaises(PersistenceStartupError) as raised:
+                create_runtime_nel(
+                    provider=FakeProvider(),
+                    database_path=path,
+                )
+
+            self.assertEqual(
+                str(raised.exception),
+                "SQLite persistence is unavailable or invalid.",
+            )
+
+    def test_schema_v3_production_startup_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path, _database = self._v3_database(directory)
 
             with self.assertRaises(PersistenceStartupError) as raised:
                 create_runtime_nel(
@@ -189,7 +216,7 @@ class RuntimeCompositionTests(unittest.TestCase):
                 connection.execute("DELETE FROM schema_version")
                 connection.execute(
                     "INSERT INTO schema_version (version, applied_at) "
-                    "VALUES (4, '2026-08-02T00:00:00Z')"
+                    "VALUES (99, '2026-08-02T00:00:00Z')"
                 )
 
             with self.assertRaises(PersistenceStartupError):
@@ -204,6 +231,20 @@ class RuntimeCompositionTests(unittest.TestCase):
             with database.transaction() as connection:
                 connection.execute(
                     "ALTER TABLE user_facts_current DROP COLUMN updated_at"
+                )
+
+            with self.assertRaises(PersistenceStartupError):
+                create_runtime_nel(
+                    provider=FakeProvider(),
+                    database_path=path,
+                )
+
+    def test_partial_fact_retirement_schema_fails_safely(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path, database = self._database(directory)
+            with database.transaction() as connection:
+                connection.execute(
+                    "ALTER TABLE user_facts_current DROP COLUMN revision_reason"
                 )
 
             with self.assertRaises(PersistenceStartupError):

@@ -7,6 +7,7 @@ from unittest.mock import patch
 from src.brain.local_intent_classifier import IntentType, LocalIntentClassifier
 from src.core.runtime import create_runtime_nel
 from src.persistence.goal_migration import migrate_goal_schema_v2_to_v3
+from src.persistence.fact_migration import migrate_fact_schema_v3_to_v4
 from src.persistence.identity_migration import migrate_identity_schema_v1_to_v2
 from src.persistence.sqlite import SQLiteDatabase
 
@@ -144,6 +145,10 @@ class LocalIntentIntegrationTests(unittest.TestCase):
         migrate_goal_schema_v2_to_v3(
             database,
             "2026-08-02T00:00:02Z",
+        )
+        migrate_fact_schema_v3_to_v4(
+            database,
+            "2026-08-02T00:00:03Z",
         )
         return path, create_runtime_nel(
             provider=provider or RecordingProvider(),

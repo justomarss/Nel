@@ -15,6 +15,7 @@ from src.errors import ApplicationError, ProviderError
 from src.identity import IdentityRepository, IdentityService
 from src.persistence.identity_migration import migrate_identity_schema_v1_to_v2
 from src.persistence.goal_migration import migrate_goal_schema_v2_to_v3
+from src.persistence.fact_migration import migrate_fact_schema_v3_to_v4
 from src.persistence.repositories import SQLiteKnowledge, SQLiteMemory
 from src.persistence.sqlite import SQLiteDatabase
 
@@ -103,6 +104,10 @@ class IdentityContextTests(unittest.TestCase):
         migrate_goal_schema_v2_to_v3(
             database,
             "2026-08-02T02:00:00Z",
+        )
+        migrate_fact_schema_v3_to_v4(
+            database,
+            "2026-08-02T00:00:03Z",
         )
         return path, database
 

@@ -32,6 +32,7 @@ from src.goals import GoalCommandHandler, GoalContextSerializer
 
 from src.services.thought_service import ThoughtService
 from src.services.knowledge_service import KnowledgeService
+from src.services.fact_commands import FactCommandHandler
 from src.thoughts import ThoughtCoordinator, ThoughtWorker
 
 from src.brain.intent_classifier import IntentClassifier
@@ -99,6 +100,7 @@ class Nel:
             self.brain,
             repository=knowledge_repository,
         )
+        self.fact_commands = FactCommandHandler(self.knowledge)
         self.thought_coordinator = ThoughtCoordinator(
             ThoughtWorker(provider),
         )
@@ -125,13 +127,17 @@ class Nel:
         )
         operational_state = self._operational_state()
         goal_commands = getattr(self, "goal_commands", None)
+        fact_commands = getattr(self, "fact_commands", None)
         command_parse = ExplicitCommandParse.not_command()
         if (
             goal_commands is not None
             and isinstance(prompt, str)
             and len(prompt) <= USER_INPUT_MAX_CHARS
         ):
-            command_parse = goal_commands.inspect(prompt)
+            if goal_commands.is_command(prompt):
+                command_parse = goal_commands.inspect(prompt)
+            elif fact_commands is not None and fact_commands.is_command(prompt):
+                command_parse = fact_commands.inspect(prompt)
         decision = self._decision_engine().decide(
             DecisionContext(
                 event_id=uuid4().hex,
@@ -145,6 +151,7 @@ class Nel:
         )
         allowed_foreground_routes = {
             DecisionType.GOAL_COMMAND,
+            DecisionType.FACT_COMMAND,
             DecisionType.ASK_CLARIFICATION,
             DecisionType.CONVERSATION_RESPONSE,
         }
@@ -160,7 +167,13 @@ class Nel:
                 return goal_commands.execute_payload(
                     decision.validated_command_payload
                 )
+            if decision.primary_decision is DecisionType.FACT_COMMAND:
+                return fact_commands.execute_payload(
+                    decision.validated_command_payload
+                )
             if decision.primary_decision is DecisionType.ASK_CLARIFICATION:
+                if command_parse.command_kind == "fact":
+                    return fact_commands.clarification_response(command_parse)
                 return goal_commands.clarification_response(command_parse)
 
             local_classifier = getattr(self, "local_intent", None)

@@ -126,7 +126,50 @@ class DecisionEngineTests(unittest.TestCase):
             DecisionReason.CONFIRMED_GOAL_COMMAND,
         )
         self.assertEqual(result.validated_command_payload, ("list",))
-        self.assertFalse(result.requires_confirmation)
+
+    def test_confirmed_fact_command_has_its_own_deterministic_route(self):
+        command = ExplicitCommandParse(
+            status=GoalCommandParseStatus.CONFIRMED,
+            operation="list",
+            arguments=("list",),
+            command_kind="fact",
+        )
+        result = self.engine.decide(
+            context(
+                user_input="/fact list",
+                explicit_command_parse=command,
+            )
+        )
+
+        self.assertIs(result.primary_decision, DecisionType.FACT_COMMAND)
+        self.assertEqual(result.target_route, "fact_command_handler")
+        self.assertEqual(
+            result.reason_code,
+            DecisionReason.CONFIRMED_FACT_COMMAND,
+        )
+        self.assertEqual(result.validated_command_payload, ("list",))
+
+    def test_malformed_fact_command_requires_deterministic_clarification(self):
+        command = ExplicitCommandParse(
+            status=GoalCommandParseStatus.CLARIFICATION_REQUIRED,
+            command_kind="fact",
+        )
+        result = self.engine.decide(
+            context(
+                user_input="/fact set name",
+                explicit_command_parse=command,
+            )
+        )
+
+        self.assertIs(
+            result.primary_decision,
+            DecisionType.ASK_CLARIFICATION,
+        )
+        self.assertEqual(
+            result.reason_code,
+            DecisionReason.FACT_COMMAND_REQUIRES_CLARIFICATION,
+        )
+        self.assertTrue(result.requires_confirmation)
 
     def test_malformed_goal_command_precedes_conversation(self):
         command = ExplicitCommandParse(

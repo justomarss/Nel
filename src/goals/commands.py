@@ -78,10 +78,12 @@ class GoalCommandHandler:
                 status=status,
                 operation=command.operation,
                 arguments=tuple(arguments),
+                command_kind="goal",
             )
         except (GoalCommandError, ValueError):
             return ExplicitCommandParse(
                 status=GoalCommandParseStatus.CLARIFICATION_REQUIRED,
+                command_kind="goal",
             )
 
     @staticmethod
