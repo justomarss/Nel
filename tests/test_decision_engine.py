@@ -149,6 +149,49 @@ class DecisionEngineTests(unittest.TestCase):
         )
         self.assertEqual(result.validated_command_payload, ("list",))
 
+    def test_confirmed_memory_command_has_its_own_deterministic_route(self):
+        command = ExplicitCommandParse(
+            status=GoalCommandParseStatus.CONFIRMED,
+            operation="remember",
+            arguments=("literal memory",),
+            command_kind="memory",
+        )
+
+        result = self.engine.decide(
+            context(
+                user_input="/remember literal memory",
+                explicit_command_parse=command,
+            )
+        )
+
+        self.assertIs(result.primary_decision, DecisionType.MEMORY_COMMAND)
+        self.assertEqual(result.target_route, "memory_command_handler")
+        self.assertEqual(
+            result.reason_code,
+            DecisionReason.CONFIRMED_MEMORY_COMMAND,
+        )
+        self.assertEqual(result.validated_command_payload, ("literal memory",))
+
+    def test_empty_memory_command_requires_deterministic_clarification(self):
+        command = ExplicitCommandParse(
+            status=GoalCommandParseStatus.CLARIFICATION_REQUIRED,
+            operation="remember",
+            command_kind="memory",
+        )
+
+        result = self.engine.decide(
+            context(
+                user_input="/remember",
+                explicit_command_parse=command,
+            )
+        )
+
+        self.assertIs(result.primary_decision, DecisionType.ASK_CLARIFICATION)
+        self.assertEqual(
+            result.reason_code,
+            DecisionReason.MEMORY_COMMAND_REQUIRES_CLARIFICATION,
+        )
+
     def test_malformed_fact_command_requires_deterministic_clarification(self):
         command = ExplicitCommandParse(
             status=GoalCommandParseStatus.CLARIFICATION_REQUIRED,

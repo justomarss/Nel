@@ -19,6 +19,7 @@ class DecisionType(str, Enum):
     ASK_CLARIFICATION = "ask_clarification"
     GOAL_COMMAND = "goal_command"
     FACT_COMMAND = "fact_command"
+    MEMORY_COMMAND = "memory_command"
     THOUGHT_START = "thought_start"
     NO_ACTION = "no_action"
 
@@ -43,6 +44,10 @@ class DecisionReason(str, Enum):
     CONFIRMED_FACT_COMMAND = "confirmed_fact_command"
     FACT_COMMAND_REQUIRES_CLARIFICATION = (
         "fact_command_requires_clarification"
+    )
+    CONFIRMED_MEMORY_COMMAND = "confirmed_memory_command"
+    MEMORY_COMMAND_REQUIRES_CLARIFICATION = (
+        "memory_command_requires_clarification"
     )
     ORDINARY_USER_INPUT = "ordinary_user_input"
     EMPTY_USER_INPUT = "empty_user_input"
@@ -96,6 +101,7 @@ _TARGETS = {
     DecisionType.ASK_CLARIFICATION: "deterministic_clarification",
     DecisionType.GOAL_COMMAND: "goal_command_handler",
     DecisionType.FACT_COMMAND: "fact_command_handler",
+    DecisionType.MEMORY_COMMAND: "memory_command_handler",
     DecisionType.THOUGHT_START: "thought_coordinator",
     DecisionType.NO_ACTION: "none",
 }
@@ -106,12 +112,16 @@ _REASONS = {
     DecisionType.ASK_CLARIFICATION: {
         DecisionReason.GOAL_COMMAND_REQUIRES_CLARIFICATION,
         DecisionReason.FACT_COMMAND_REQUIRES_CLARIFICATION,
+        DecisionReason.MEMORY_COMMAND_REQUIRES_CLARIFICATION,
     },
     DecisionType.GOAL_COMMAND: {
         DecisionReason.CONFIRMED_GOAL_COMMAND,
     },
     DecisionType.FACT_COMMAND: {
         DecisionReason.CONFIRMED_FACT_COMMAND,
+    },
+    DecisionType.MEMORY_COMMAND: {
+        DecisionReason.CONFIRMED_MEMORY_COMMAND,
     },
     DecisionType.THOUGHT_START: {
         DecisionReason.BACKGROUND_ELIGIBLE,
@@ -147,6 +157,7 @@ class DecisionResult:
         if self.primary_decision in {
             DecisionType.GOAL_COMMAND,
             DecisionType.FACT_COMMAND,
+            DecisionType.MEMORY_COMMAND,
         }:
             if not self.validated_command_payload:
                 raise ValueError("Command payload is required.")
@@ -180,6 +191,13 @@ class DecisionEngine:
                     DecisionReason.CONFIRMED_FACT_COMMAND,
                     payload=command.arguments,
                 )
+            if command.command_kind == "memory":
+                return self._result(
+                    context,
+                    DecisionType.MEMORY_COMMAND,
+                    DecisionReason.CONFIRMED_MEMORY_COMMAND,
+                    payload=command.arguments,
+                )
             return self._result(
                 context,
                 DecisionType.GOAL_COMMAND,
@@ -187,10 +205,13 @@ class DecisionEngine:
                 payload=command.arguments,
             )
         if command.status is GoalCommandParseStatus.CLARIFICATION_REQUIRED:
-            reason = (
-                DecisionReason.FACT_COMMAND_REQUIRES_CLARIFICATION
-                if command.command_kind == "fact"
-                else DecisionReason.GOAL_COMMAND_REQUIRES_CLARIFICATION
+            reasons = {
+                "fact": DecisionReason.FACT_COMMAND_REQUIRES_CLARIFICATION,
+                "memory": DecisionReason.MEMORY_COMMAND_REQUIRES_CLARIFICATION,
+            }
+            reason = reasons.get(
+                command.command_kind,
+                DecisionReason.GOAL_COMMAND_REQUIRES_CLARIFICATION,
             )
             return self._result(
                 context,
@@ -285,7 +306,7 @@ class DecisionEngine:
         if (
             not isinstance(command.status, GoalCommandParseStatus)
             or (command.operation is not None and not isinstance(command.operation, str))
-            or command.command_kind not in {None, "goal", "fact"}
+            or command.command_kind not in {None, "goal", "fact", "memory"}
             or not isinstance(command.arguments, tuple)
             or any(not isinstance(value, str) for value in command.arguments)
             or command.serialized_length() > COMMAND_PARSE_MAX_CHARS

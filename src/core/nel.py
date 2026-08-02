@@ -36,6 +36,7 @@ from src.services.thought_service import ThoughtService
 from src.services.knowledge_service import KnowledgeService
 from src.services.fact_commands import FactCommandHandler
 from src.services.memory_service import MemoryService
+from src.services.memory_commands import MemoryCommandHandler
 from src.thoughts import ThoughtCoordinator, ThoughtWorker
 
 from src.brain.intent_classifier import IntentClassifier
@@ -111,6 +112,7 @@ class Nel:
             repository=knowledge_repository,
         )
         self.fact_commands = FactCommandHandler(self.knowledge)
+        self.memory_commands = MemoryCommandHandler(self.memory)
         self.thought_coordinator = ThoughtCoordinator(
             ThoughtWorker(provider),
         )
@@ -138,16 +140,21 @@ class Nel:
         operational_state = self._operational_state()
         goal_commands = getattr(self, "goal_commands", None)
         fact_commands = getattr(self, "fact_commands", None)
+        memory_commands = getattr(self, "memory_commands", None)
         command_parse = ExplicitCommandParse.not_command()
         if (
-            goal_commands is not None
-            and isinstance(prompt, str)
+            isinstance(prompt, str)
             and len(prompt) <= USER_INPUT_MAX_CHARS
         ):
-            if goal_commands.is_command(prompt):
+            if goal_commands is not None and goal_commands.is_command(prompt):
                 command_parse = goal_commands.inspect(prompt)
             elif fact_commands is not None and fact_commands.is_command(prompt):
                 command_parse = fact_commands.inspect(prompt)
+            elif (
+                memory_commands is not None
+                and memory_commands.is_command(prompt)
+            ):
+                command_parse = memory_commands.inspect(prompt)
         decision = self._decision_engine().decide(
             DecisionContext(
                 event_id=uuid4().hex,
@@ -162,6 +169,7 @@ class Nel:
         allowed_foreground_routes = {
             DecisionType.GOAL_COMMAND,
             DecisionType.FACT_COMMAND,
+            DecisionType.MEMORY_COMMAND,
             DecisionType.ASK_CLARIFICATION,
             DecisionType.CONVERSATION_RESPONSE,
         }
@@ -181,9 +189,15 @@ class Nel:
                 return fact_commands.execute_payload(
                     decision.validated_command_payload
                 )
+            if decision.primary_decision is DecisionType.MEMORY_COMMAND:
+                return memory_commands.execute_payload(
+                    decision.validated_command_payload
+                )
             if decision.primary_decision is DecisionType.ASK_CLARIFICATION:
                 if command_parse.command_kind == "fact":
                     return fact_commands.clarification_response(command_parse)
+                if command_parse.command_kind == "memory":
+                    return memory_commands.clarification_response(command_parse)
                 return goal_commands.clarification_response(command_parse)
 
             local_classifier = getattr(self, "local_intent", None)

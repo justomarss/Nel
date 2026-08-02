@@ -5,10 +5,10 @@ from pathlib import Path
 load_dotenv()
 
 
-def _required_env(name: str) -> str:
+def _optional_env(name: str) -> str | None:
     value = os.getenv(name)
-    if not value:
-        raise RuntimeError(f"Missing required environment variable: {name}")
+    if value is None or not value.strip():
+        return None
     return value
 
 
@@ -43,9 +43,9 @@ def _bool_env(name: str, default: bool) -> bool:
     )
 
 
-NVIDIA_API_KEY = _required_env("NVIDIA_API_KEY")
-NVIDIA_BASE_URL = _required_env("NVIDIA_BASE_URL")
-NVIDIA_MODEL = "meta/llama-3.1-70b-instruct"
+NVIDIA_API_KEY = _optional_env("NVIDIA_API_KEY")
+NVIDIA_BASE_URL = _optional_env("NVIDIA_BASE_URL")
+NVIDIA_MODEL = _optional_env("NVIDIA_MODEL")
 NVIDIA_INTERACTIVE_TIMEOUT_SECONDS = 45.0
 NEL_DATABASE_PATH = Path(
     os.getenv("NEL_DATABASE_PATH") or "memory/nel.sqlite3"

@@ -6,18 +6,31 @@ from src.errors import ProviderError
 class NvidiaNimProvider:
     def __init__(
         self,
-        model: str,
-        api_key: str,
-        base_url: str,
+        model: str | None,
+        api_key: str | None,
+        base_url: str | None,
         timeout: float = 45.0,
     ):
+        if not all(
+            isinstance(value, str) and bool(value.strip())
+            for value in (model, api_key, base_url)
+        ):
+            raise ProviderError(
+                "NVIDIA NIM provider configuration is unavailable."
+            )
         self.model = model
-        self.client = OpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            timeout=timeout,
-            max_retries=0,
-        )
+        try:
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url=base_url,
+                timeout=timeout,
+                max_retries=0,
+            )
+        except Exception as exc:
+            raise ProviderError(
+                "NVIDIA NIM provider configuration failed "
+                f"({type(exc).__name__})."
+            ) from None
 
     def generate(self, prompt: str) -> str:
         return self._generate(prompt)

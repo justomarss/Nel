@@ -22,8 +22,9 @@ yet meet the first-stable criteria.
 
 - Entry point: root `main.py`
 - Composition root: `src/core/nel.py`
-- Environment: `.env` supplies NVIDIA credentials and endpoint configuration;
-  the provisional model policy is tracked in `src/core/config.py`
+- Environment: `.env` may supply NVIDIA credentials, model, and endpoint
+  configuration. Importing runtime modules does not require those values;
+  provider construction validates them when NVIDIA NIM is actually selected.
 - Dependencies: `openai`, `pydantic`, `python-dotenv`, `rich`
 - Interface: interactive CLI only
 
@@ -46,8 +47,8 @@ yet meet the first-stable criteria.
 - Runtime code requires an existing integrity-checked schema-version-4
   database with exactly the eight approved persistence tables, the goal index,
   identity immutability triggers, and fact-retirement columns. It never
-  migrates or creates a production database at startup. Production remains on
-  schema version 3 until the controlled v3-to-v4 migration is executed.
+  migrates or creates a production database at startup. Production is schema
+  version 4 after the controlled migration.
 - Identity v1 storage and runtime composition are implemented. The controlled
   production migration to schema version 2 is complete.
 - Runtime Memory, Knowledge, Identity, and Goal services share one guarded
@@ -58,12 +59,15 @@ yet meet the first-stable criteria.
   updates use expected versions, and completion, progress, reopen, and restore
   operations enforce their accepted confirmation rules.
 - Fact inspection, correction, history, and retirement are routed locally
-  through explicit `/fact` commands and `KnowledgeService`; runtime activation
-  is blocked until the controlled production schema-v4 migration.
+  through explicit `/fact` commands and `KnowledgeService` on schema v4.
+- `MemoryService` is the sole normal durable-memory write boundary. Ordinary
+  conversation and provider failures do not create memory. Explicit non-empty
+  `/remember` commands route through Decision Engine, invalidate foreground
+  thought work, and execute locally without a provider call.
 - Decision Engine v1 uses immutable bounded contexts and results to select
   exactly one deterministic foreground or background route before any provider
-  call. It has no repository or write access, and provider output cannot affect
-  route selection.
+  call. It routes explicit goal, fact, and memory commands, has no repository
+  or write access, and cannot be influenced by provider output.
 - Current user facts are stored directly, changed values retain recoverable
   history, and validated extraction batches are transactional.
 - The verified JSON-to-SQLite cutover is complete. JSON files and the initial
@@ -98,10 +102,10 @@ yet meet the first-stable criteria.
 | State | Operational state is an in-memory enum; persistent Nel identity is stored separately and is read into prompts without a conversation write path |
 | Thoughts | Minimal in-memory typed observation pipeline is wired; policies reject permanent changes and automatic generation remains disabled by default |
 | Goals | Explicit storage commands and bounded read-only conversation context are integrated; natural-language inference, planning, reminders, scheduling, actions, and autonomous creation remain absent |
-| Decision Engine | Deterministic routing covers conversation, explicit goal and fact commands, clarification, background thought starts, and no-action; natural-language write routing and memory, knowledge, and identity candidates are deferred |
+| Decision Engine | Deterministic routing covers conversation, explicit goal, fact, and memory commands, clarification, background thought starts, and no-action; natural-language write routing and knowledge or identity candidates are deferred |
 | Clock | Lifecycle is owned, but an active provider callback cannot be cancelled early |
 | Provider independence | Brain is injected, but composition hardcodes NVIDIA NIM |
-| Error handling | Provider and background failures are bounded; startup persistence failures are redacted, while operational write failures need broader application handling |
+| Error handling | Provider and background failures are bounded; startup persistence and provider-configuration failures are redacted, while operational write failures need broader application handling |
 | Retrieval | Structured facts enter prompts, but there is no relevant-memory retrieval |
 | Silence/autonomy | Reflection exists; controlled silence and topic initiation do not |
 
@@ -118,7 +122,7 @@ yet meet the first-stable criteria.
 
 ## Tests
 
-The repository has 219 assertion-based `unittest` cases covering:
+The repository has 240 assertion-based `unittest` cases covering:
 
 - user favorite update from an older to newer value;
 - literal value preservation for different fact domains;
@@ -153,6 +157,10 @@ The repository has 219 assertion-based `unittest` cases covering:
 - schema-v4 fact retirement, reactivation, history continuity, backup and
   restore validation, interrogative extraction rejection, and deterministic
   provider-free `/fact` routing.
+- explicit `/remember` Decision Engine routing, deterministic clarification,
+  foreground thought invalidation, provider exclusion, and CLI routing.
+- import safety without NVIDIA credentials and redacted provider-configuration
+  failures at provider and CLI startup boundaries.
 
 `tests/test_event.py` is a print-based EventBus smoke script, not an
 assertion-based test.
@@ -169,14 +177,18 @@ so provider integration is not yet operationally reliable.
    writes; recovery must use SQLite or a verified SQLite backup.
 3. In-flight thought provider work cannot be interrupted after it starts;
    cancellation invalidates and discards its eventual result instead.
-4. `Brain.should_remember` relies on unconstrained yes/no text and a
-   substring check.
+4. Structured extraction is schema-validated, but provider-produced facts are
+   not yet deterministically grounded against the literal user statement.
 5. Structured keys are format-normalized, but semantic synonym consistency
    is not guaranteed.
 6. The provisional 70B model showed variable latency in qualification; a
    foreground request can occupy the full 45-second timeout.
 7. Tests primarily use fakes; live provider outage behavior still lacks
    deterministic automated coverage.
+8. Complete prompt context has no unified serialized-character budget, and
+   memory retrieval remains recency-based rather than relevance-based.
+9. The retained cutover CLI targets schema v1 and is not the operational
+   verifier for the active schema-v4 database.
 
 ## Legacy, Duplicate, and Placeholder Code
 
@@ -208,6 +220,17 @@ documents remain present but are non-normative until reconciled.
 - The target requires relevant retrieval; current prompts use a bounded newest
   subset without relevance scoring.
 - The target is provider-independent; construction currently hardcodes NIM.
+- Generated extraction output can still become durable user knowledge after
+  structural validation without deterministic semantic grounding.
+
+## Remaining v1.0 Blockers
+
+- Define and enforce a deterministic authority boundary for provider-assisted
+  user-fact extraction.
+- Add a total serialized context budget and relevant-memory selection.
+- Replace or retire schema-v1-only operational cutover verification tooling.
+- Create a fresh validated release backup and complete sustained runtime,
+  controlled initiation, and appropriate-silence acceptance checks.
 
 ## Provisional Baseline Choices
 

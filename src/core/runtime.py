@@ -2,7 +2,7 @@ import sqlite3
 
 from src.core.config import NEL_DATABASE_PATH
 from src.core.nel import Nel
-from src.errors import PersistenceStartupError
+from src.errors import ApplicationError, PersistenceStartupError, ProviderError
 from src.goals import GoalRepository, GoalService
 from src.identity import IdentityRepository, IdentityService
 from src.persistence.identity_migration import IDENTITY_BOOTSTRAP
@@ -48,4 +48,9 @@ def create_runtime_nel(
     }
     if provider is not None:
         arguments["provider"] = provider
-    return nel_factory(**arguments)
+    try:
+        return nel_factory(**arguments)
+    except ProviderError:
+        raise ApplicationError(
+            "Model provider configuration is unavailable."
+        ) from None

@@ -17,7 +17,7 @@ def run():
     try:
         try:
             nel = create_runtime_nel(nel_factory=Nel)
-        except PersistenceStartupError as exc:
+        except (ApplicationError, PersistenceStartupError) as exc:
             print(f"Nel: {exc}", file=sys.stderr)
             return 1
 
@@ -26,12 +26,6 @@ def run():
 
             if text == "exit":
                 break
-
-            if text == "/remember" or text.startswith("/remember "):
-                payload = "" if text == "/remember" else text[10:]
-                result = nel.remember(payload)
-                print(result.message)
-                continue
 
             try:
                 response = nel.think(text)

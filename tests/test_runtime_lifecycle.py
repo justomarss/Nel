@@ -10,7 +10,6 @@ from src.core.clock import Clock
 from src.core.config import (
     ENABLE_BACKGROUND_THOUGHTS,
     NVIDIA_INTERACTIVE_TIMEOUT_SECONDS,
-    NVIDIA_MODEL,
 )
 from src.core.nel import Nel
 from src.core.state import State
@@ -21,13 +20,12 @@ class RuntimeLifecycleTests(unittest.TestCase):
     def test_provisional_model_and_provider_policy(self):
         with patch("src.brain.providers.OpenAI") as client:
             NvidiaNimProvider(
-                model=NVIDIA_MODEL,
+                model="meta/llama-3.1-70b-instruct",
                 api_key="test-key",
                 base_url="https://example.invalid/v1",
                 timeout=NVIDIA_INTERACTIVE_TIMEOUT_SECONDS,
             )
 
-        self.assertEqual(NVIDIA_MODEL, "meta/llama-3.1-70b-instruct")
         client.assert_called_once_with(
             api_key="test-key",
             base_url="https://example.invalid/v1",

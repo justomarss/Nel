@@ -1,5 +1,6 @@
 import hashlib
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -13,11 +14,22 @@ from src.persistence.identity_migration import migrate_identity_schema_v1_to_v2
 from src.persistence.sqlite import SQLiteDatabase
 from src.services.memory_service import (
     MemoryService,
-    MemoryWriteResult,
     MemoryWriteStatus,
     memory_fingerprint,
     normalize_memory_text,
 )
+from src.thoughts import ThoughtCoordinator
+
+
+class BlockingWorker:
+    def __init__(self):
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def run(self, _context, _cancelled):
+        self.entered.set()
+        self.release.wait(1)
+        return None
 
 
 class InMemoryRepository:
@@ -163,6 +175,73 @@ class MemoryServiceTests(unittest.TestCase):
         self.assertEqual(result.status, MemoryWriteStatus.ACCEPTED)
         self.assertEqual(provider.prompts, [])
 
+    def test_remember_command_routes_locally_and_preserves_literal_payload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._database(directory)
+            provider = RecordingProvider()
+            nel = create_runtime_nel(provider=provider, database_path=path)
+            try:
+                response = nel.think("/remember   literal Unicode: Ömər  ")
+                stored = nel.memory.recall()
+            finally:
+                nel.stop()
+
+        self.assertEqual(response, "Yadda saxladım.")
+        self.assertEqual(stored, ["  literal Unicode: Ömər  "])
+        self.assertEqual(provider.prompts, [])
+
+    def test_empty_remember_command_clarifies_without_write_or_provider(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._database(directory)
+            provider = RecordingProvider()
+            nel = create_runtime_nel(provider=provider, database_path=path)
+            try:
+                response = nel.think("/remember   ")
+                stored = nel.memory.recall()
+            finally:
+                nel.stop()
+
+        self.assertIn("/remember", response)
+        self.assertEqual(stored, [])
+        self.assertEqual(provider.prompts, [])
+
+    def test_whitespace_only_tab_command_is_malformed_and_clarifies(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._database(directory)
+            provider = RecordingProvider()
+            nel = create_runtime_nel(provider=provider, database_path=path)
+            try:
+                response = nel.think("/remember\t  ")
+                stored = nel.memory.recall()
+            finally:
+                nel.stop()
+
+        self.assertIn("/remember", response)
+        self.assertEqual(stored, [])
+        self.assertEqual(provider.prompts, [])
+
+    def test_remember_command_invalidates_active_foreground_thought(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._database(directory)
+            nel = create_runtime_nel(
+                provider=RecordingProvider(),
+                database_path=path,
+            )
+            worker = BlockingWorker()
+            coordinator = ThoughtCoordinator(worker)
+            nel.thought_coordinator = coordinator
+            try:
+                self.assertTrue(coordinator.start(object()))
+                self.assertTrue(worker.entered.wait(0.5))
+                self.assertEqual(nel.think("/remember foreground"), "Yadda saxladım.")
+                self.assertEqual(coordinator.state, "idle")
+            finally:
+                worker.release.set()
+                coordinator.wait(0.5)
+                nel.stop()
+
+        self.assertIsNone(coordinator.last_result)
+
     def test_ordinary_successful_conversation_never_writes_memory(self):
         with tempfile.TemporaryDirectory() as directory:
             path = self._database(directory)
@@ -221,26 +300,14 @@ class MemoryServiceTests(unittest.TestCase):
         self.assertEqual(duplicate.status, MemoryWriteStatus.DUPLICATE)
         self.assertEqual(stored, ["Davamlı yaddaş: Ömər"])
 
-    def test_cli_remember_uses_deterministic_local_results(self):
+    def test_cli_routes_remember_through_nel_think_without_memory_bypass(self):
         class FakeNel:
             def __init__(self):
-                self.payloads = []
-
-            def remember(self, text):
-                self.payloads.append(text)
-                status = (
-                    MemoryWriteStatus.EMPTY
-                    if not text
-                    else MemoryWriteStatus.ACCEPTED
-                )
-                messages = {
-                    MemoryWriteStatus.EMPTY: "Yadda saxlanacaq mətn boşdur.",
-                    MemoryWriteStatus.ACCEPTED: "Yadda saxladım.",
-                }
-                return MemoryWriteResult(status, messages[status])
+                self.inputs = []
 
             def think(self, text):
-                raise AssertionError("/remember must not enter conversation")
+                self.inputs.append(text)
+                return "local memory response"
 
             def stop(self):
                 pass
@@ -250,17 +317,18 @@ class MemoryServiceTests(unittest.TestCase):
             patch.object(main, "create_runtime_nel", return_value=nel),
             patch(
                 "builtins.input",
-                side_effect=["/remember literal text", "/remember", "exit"],
+                side_effect=["/remember literal text", "exit"],
             ),
             patch("builtins.print") as output,
         ):
             result = main.run()
 
         self.assertEqual(result, 0)
-        self.assertEqual(nel.payloads, ["literal text", ""])
+        self.assertFalse(hasattr(nel, "remember"))
+        self.assertEqual(nel.inputs, ["/remember literal text"])
         self.assertEqual(
             [call.args[0] for call in output.call_args_list],
-            ["Yadda saxladım.", "Yadda saxlanacaq mətn boşdur."],
+            ["local memory response"],
         )
 
 
