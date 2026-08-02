@@ -22,27 +22,40 @@ technical defaults, not accepted permanent architecture.
 
 ```text
 root main.py (development CLI)
-  -> src/core/nel.py (temporary composition root)
-     -> IntentClassifier
-     -> Brain
-        -> NvidiaNimProvider
-     -> KnowledgeService
-        -> KnowledgeExtractor
-        -> Knowledge JSON
-     -> Memory
-        -> raw long-term JSON
-     -> StateManager
-     -> DecisionEngine
-     -> EventBus
-     -> Clock
-        -> ThoughtService
-           -> ThoughtCoordinator
-              -> ThoughtWorker
-              -> temporary TypedThoughtResult
-              -> deny-by-default policy boundaries
+  -> src/core/runtime.py (guarded schema-v3 composition)
+     -> src/core/nel.py (temporary composition root)
+        -> bounded immutable DecisionContext
+        -> pure deterministic DecisionEngine
+           -> goal_command -> GoalCommandHandler -> GoalService
+           -> ask_clarification -> deterministic response
+           -> conversation_response -> existing conversation flow
+              -> IntentClassifier
+              -> KnowledgeService / KnowledgeExtractor
+              -> bounded Memory and Identity context
+              -> Brain -> NvidiaNimProvider
+           -> no_action -> no provider or write
+        -> Clock / background event
+           -> DecisionEngine
+              -> thought_start -> ThoughtService -> ThoughtCoordinator
+                 -> ThoughtWorker -> temporary TypedThoughtResult
+                 -> deny-by-default policy boundaries
+        -> shared guarded SQLite persistence
 ```
 
 This diagram describes the current prototype, not the desired stable runtime.
+
+## Decision Boundary
+
+ADR-020 defines Decision Engine v1 as a pure provider-independent routing
+boundary. It receives only bounded operational event data and explicit goal
+command syntax. It selects exactly one route before any provider call and has
+no repository access or write authority.
+
+The v1 routes are `conversation_response`, `ask_clarification`,
+`goal_command`, `thought_start`, and `no_action`. Memory, Knowledge, and
+Identity candidate routing is deliberately absent; their existing behavior
+continues inside the selected conversation route. Natural-language goal text
+is conversation, never a goal command.
 
 ## Concept Boundaries
 

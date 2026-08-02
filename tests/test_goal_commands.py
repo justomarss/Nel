@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from src.core.nel import Nel
@@ -149,6 +150,28 @@ class GoalCommandIntegrationTests(unittest.TestCase):
             self.assertEqual(goal.version, 1)
             self.assertEqual(provider.prompts, [])
 
+    def test_clarification_empty_and_oversized_routes_call_no_provider(self):
+        with tempfile.TemporaryDirectory() as directory:
+            provider = PromptProvider()
+            _path, nel = self._runtime(directory, provider)
+            try:
+                clarification = nel.think("/goal create --title only")
+                empty = nel.think("   ")
+                oversized = nel.think("x" * 4097)
+                goals = nel.goals.list_current()
+                memories = nel.memory.recall()
+                facts = nel.knowledge.facts()
+            finally:
+                nel.stop()
+
+            self.assertIn("natamamdır", clarification)
+            self.assertEqual(empty, "")
+            self.assertEqual(oversized, "")
+            self.assertEqual(provider.prompts, [])
+            self.assertEqual(goals, ())
+            self.assertEqual(memories, [])
+            self.assertEqual(facts, {})
+
     def test_vague_intention_is_not_persisted_as_goal(self):
         with tempfile.TemporaryDirectory() as directory:
             _path, nel = self._runtime(directory)
@@ -290,7 +313,7 @@ class GoalCommandIntegrationTests(unittest.TestCase):
             finally:
                 nel.stop()
 
-            self.assertIn("rədd edildi", unknown_rejected)
+            self.assertIn("İrəliləyiş", unknown_rejected)
             self.assertIn("--confirm", unconfirmed)
             self.assertEqual(reported.version, 2)
             self.assertEqual(
@@ -314,6 +337,25 @@ class GoalCommandIntegrationTests(unittest.TestCase):
                 nel.stop()
 
             self.assertTrue(response.startswith("/goal create"))
+            self.assertEqual(goals, ())
+
+    def test_unknown_decision_fails_closed_without_provider_call(self):
+        with tempfile.TemporaryDirectory() as directory:
+            provider = PromptProvider()
+            _path, nel = self._runtime(directory, provider)
+            nel.decision = SimpleNamespace(
+                decide=lambda _context: SimpleNamespace(
+                    primary_decision="unknown"
+                )
+            )
+            try:
+                response = nel.think("Adi söhbət")
+                goals = nel.goals.list_current()
+            finally:
+                nel.stop()
+
+            self.assertEqual(response, "")
+            self.assertEqual(provider.prompts, [])
             self.assertEqual(goals, ())
 
     def test_thought_result_cannot_mutate_goals(self):

@@ -2,6 +2,10 @@ import argparse
 import shlex
 from uuid import uuid4
 
+from src.core.decision_engine import (
+    ExplicitCommandParse,
+    GoalCommandParseStatus,
+)
 from src.goals.models import (
     GoalCandidate,
     GoalOwner,
@@ -60,14 +64,64 @@ class GoalCommandHandler:
         stripped = text.strip()
         return stripped == cls.PREFIX or stripped.startswith(cls.PREFIX + " ")
 
+    def inspect(self, text: str) -> ExplicitCommandParse:
+        if not self.is_command(text):
+            return ExplicitCommandParse.not_command()
+        try:
+            arguments = self._arguments(text)
+            command = self._parser.parse_args(arguments)
+            if self._requires_clarification(command):
+                status = GoalCommandParseStatus.CLARIFICATION_REQUIRED
+            else:
+                status = GoalCommandParseStatus.CONFIRMED
+            return ExplicitCommandParse(
+                status=status,
+                operation=command.operation,
+                arguments=tuple(arguments),
+            )
+        except (GoalCommandError, ValueError):
+            return ExplicitCommandParse(
+                status=GoalCommandParseStatus.CLARIFICATION_REQUIRED,
+            )
+
+    @staticmethod
+    def clarification_response(command_parse=None) -> str:
+        operation = getattr(command_parse, "operation", None)
+        if operation == "complete":
+            return "Tamamlama üçün --accept-success təsdiqi tələb olunur."
+        if operation == "progress":
+            return (
+                "İrəliləyiş üçün uyğun xülasə və tələb olunduqda "
+                "--confirm təsdiqi verilməlidir."
+            )
+        return (
+            "Məqsəd əmri natamamdır və ya tələb olunan təsdiq yoxdur. "
+            "Əmri düzgün arqumentlər və təsdiqlə yenidən yaz."
+        )
+
     def execute(self, text: str) -> str:
         if self._service is None:
             return "Məqsəd xidməti əlçatan deyil."
         try:
-            arguments = shlex.split(text.strip()[len(self.PREFIX):].strip())
-            if not arguments:
-                raise GoalCommandError("goal operation is required")
-            command = self._parser.parse_args(arguments)
+            return self.execute_payload(self._arguments(text))
+        except GoalVersionConflict:
+            return "Məqsəd versiyası dəyişib. Siyahını yenilə və yenidən cəhd et."
+        except GoalNotFoundError:
+            return "Məqsəd tapılmadı."
+        except (GoalCommandError, GoalPolicyError, ValueError) as exc:
+            return f"Məqsəd əmri rədd edildi: {exc}"
+        except GoalRepositoryError:
+            return "Məqsəd əmri yaddaşa yazıla bilmədi."
+
+    def execute_payload(self, arguments) -> str:
+        if self._service is None:
+            return "Məqsəd xidməti əlçatan deyil."
+        try:
+            command = self._parser.parse_args(list(arguments))
+            if self._requires_clarification(command):
+                return self.clarification_response(
+                    self.inspect(self.PREFIX + " " + shlex.join(arguments))
+                )
             return self._dispatch(command)
         except GoalVersionConflict:
             return "Məqsəd versiyası dəyişib. Siyahını yenilə və yenidən cəhd et."
@@ -77,6 +131,37 @@ class GoalCommandHandler:
             return f"Məqsəd əmri rədd edildi: {exc}"
         except GoalRepositoryError:
             return "Məqsəd əmri yaddaşa yazıla bilmədi."
+
+    @classmethod
+    def _arguments(cls, text: str):
+        if not cls.is_command(text):
+            raise GoalCommandError("goal command is required")
+        arguments = shlex.split(text.strip()[len(cls.PREFIX):].strip())
+        if not arguments:
+            raise GoalCommandError("goal operation is required")
+        return arguments
+
+    @staticmethod
+    def _requires_clarification(command) -> bool:
+        if command.operation == "complete":
+            return not command.accept_success
+        if command.operation == "progress":
+            verification = ProgressVerification(command.verification)
+            if verification is ProgressVerification.UNKNOWN:
+                return command.summary is not None or command.percent is not None
+            return not command.confirm or not command.summary
+        if command.operation == "create":
+            return (
+                not command.title.strip()
+                or not command.success.strip()
+                or (
+                    command.description is not None
+                    and not command.description.strip()
+                )
+            )
+        if command.operation in {"reopen", "restore"}:
+            return not command.reason.strip()
+        return False
 
     def _dispatch(self, command) -> str:
         operation = command.operation

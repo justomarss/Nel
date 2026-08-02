@@ -41,6 +41,11 @@ class ThoughtCoordinator:
             return self._state
 
     @property
+    def foreground_active(self) -> bool:
+        with self._lock:
+            return self._foreground_active
+
+    @property
     def last_result(self):
         with self._lock:
             return self._last_result

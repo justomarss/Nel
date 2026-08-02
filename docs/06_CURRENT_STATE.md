@@ -57,6 +57,10 @@ yet meet the first-stable criteria.
   before provider invocation. GoalService remains the write boundary, all
   updates use expected versions, and completion, progress, reopen, and restore
   operations enforce their accepted confirmation rules.
+- Decision Engine v1 uses immutable bounded contexts and results to select
+  exactly one deterministic foreground or background route before any provider
+  call. It has no repository or write access, and provider output cannot affect
+  route selection.
 - Current user facts are stored directly, changed values retain recoverable
   history, and validated extraction batches are transactional.
 - The verified JSON-to-SQLite cutover is complete. JSON files and the initial
@@ -91,6 +95,7 @@ yet meet the first-stable criteria.
 | State | Operational state is an in-memory enum; persistent Nel identity is stored separately and is read into prompts without a conversation write path |
 | Thoughts | Minimal in-memory typed observation pipeline is wired; policies reject permanent changes and automatic generation remains disabled by default |
 | Goals | Explicit storage commands and bounded read-only conversation context are integrated; natural-language inference, planning, reminders, scheduling, actions, and autonomous creation remain absent |
+| Decision Engine | Deterministic v1 routing covers conversation, goal commands, clarification, background thought starts, and no-action; memory, knowledge, and identity candidate routing is deferred |
 | Clock | Lifecycle is owned, but an active provider callback cannot be cancelled early |
 | Provider independence | Brain is injected, but composition hardcodes NVIDIA NIM |
 | Error handling | Provider and background failures are bounded; startup persistence failures are redacted, while operational write failures need broader application handling |
@@ -110,7 +115,7 @@ yet meet the first-stable criteria.
 
 ## Tests
 
-The repository has 179 assertion-based `unittest` cases covering:
+The repository has 190 assertion-based `unittest` cases covering:
 
 - user favorite update from an older to newer value;
 - literal value preservation for different fact domains;
@@ -139,6 +144,9 @@ The repository has 179 assertion-based `unittest` cases covering:
 - explicit goal commands, confirmation gates, expected-version conflicts,
   restart persistence, bounded read-only context, and provider/thought
   isolation from goal writes.
+- immutable bounded decision models, exact foreground and background
+  precedence, fail-closed routing, and provider/repository exclusion from route
+  selection.
 
 `tests/test_event.py` is a print-based EventBus smoke script, not an
 assertion-based test.

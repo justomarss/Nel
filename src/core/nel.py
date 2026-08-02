@@ -1,5 +1,7 @@
 import json
 import logging
+from time import monotonic
+from uuid import uuid4
 
 from src.brain.brain import Brain
 from src.brain.providers import NvidiaNimProvider
@@ -16,7 +18,14 @@ from src.errors import ApplicationError, ProviderError
 from src.core.state_manager import StateManager
 from src.core.state import State
 from src.core.clock import Clock
-from src.core.decision_engine import DecisionEngine
+from src.core.decision_engine import (
+    DecisionContext,
+    DecisionEngine,
+    DecisionType,
+    EventKind,
+    ExplicitCommandParse,
+    USER_INPUT_MAX_CHARS,
+)
 
 from src.events.event_bus import EventBus
 from src.goals import GoalCommandHandler, GoalContextSerializer
@@ -32,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 IDENTITY_PREFERENCE_CONTEXT_LIMIT = 20
 IDENTITY_CONTEXT_MAX_CHARS = 4096
+BACKGROUND_THOUGHT_INTERVAL_SECONDS = 30
 
 
 class Nel:
@@ -83,6 +93,7 @@ class Nel:
         )
         self.raw_memory_context_limit = raw_memory_context_limit
         self.background_thoughts_enabled = enable_background_thoughts
+        self._last_background_thought_at = monotonic()
 
         self.events = EventBus()
         self.events.subscribe("clock_tick", self.on_clock_tick)
@@ -92,14 +103,47 @@ class Nel:
 
     def think(self, prompt: str) -> str:
         coordinator = getattr(self, "thought_coordinator", None)
+        background_thought_state = (
+            "idle" if coordinator is None else coordinator.state
+        )
         if coordinator is not None:
             coordinator.begin_foreground()
 
         try:
+            operational_state = self._operational_state()
             self.state.set(State.THINKING)
             goal_commands = getattr(self, "goal_commands", None)
-            if goal_commands is not None and goal_commands.is_command(prompt):
-                return goal_commands.execute(prompt)
+            command_parse = ExplicitCommandParse.not_command()
+            if (
+                goal_commands is not None
+                and isinstance(prompt, str)
+                and len(prompt) <= USER_INPUT_MAX_CHARS
+            ):
+                command_parse = goal_commands.inspect(prompt)
+            decision = self._decision_engine().decide(
+                DecisionContext(
+                    event_id=uuid4().hex,
+                    event_kind=EventKind.USER_TURN,
+                    user_input=prompt,
+                    operational_state=operational_state,
+                    explicit_command_parse=command_parse,
+                    foreground_activity=True,
+                    background_thought_state=background_thought_state,
+                )
+            )
+            if decision.primary_decision is DecisionType.GOAL_COMMAND:
+                return goal_commands.execute_payload(
+                    decision.validated_command_payload
+                )
+            if decision.primary_decision is DecisionType.ASK_CLARIFICATION:
+                return goal_commands.clarification_response(command_parse)
+            if decision.primary_decision is DecisionType.NO_ACTION:
+                return ""
+            if (
+                decision.primary_decision
+                is not DecisionType.CONVERSATION_RESPONSE
+            ):
+                return ""
 
             identity_context = self._identity_context()
             goal_context = self._goal_context()
@@ -254,6 +298,21 @@ Nel:
     def remember(self, text: str) -> None:
         self.memory.remember(text)
 
+    def _decision_engine(self) -> DecisionEngine:
+        engine = getattr(self, "decision", None)
+        return DecisionEngine() if engine is None else engine
+
+    def _operational_state(self) -> str:
+        state_manager = getattr(self, "state", None)
+        getter = getattr(state_manager, "get", None)
+        current = getter() if getter is not None else State.IDLE
+        return getattr(current, "value", current)
+
+    def _background_thought_due(self) -> bool:
+        now = monotonic()
+        last = getattr(self, "_last_background_thought_at", now)
+        return now - last > BACKGROUND_THOUGHT_INTERVAL_SECONDS
+
     def tick(self) -> None:
         self.events.emit("clock_tick")
 
@@ -265,14 +324,32 @@ Nel:
         if not self.background_thoughts_enabled:
             return
 
-        if self.state.get() is not State.IDLE:
+        if not self._background_thought_due():
             return
 
         try:
-            if not self.decision.should_think():
+            coordinator = getattr(self, "thought_coordinator", None)
+            context = DecisionContext(
+                event_id=uuid4().hex,
+                event_kind=EventKind.BACKGROUND_EVENT,
+                user_input="",
+                operational_state=self._operational_state(),
+                explicit_command_parse=ExplicitCommandParse.not_command(),
+                foreground_activity=(
+                    False
+                    if coordinator is None
+                    else coordinator.foreground_active
+                ),
+                background_thought_state=(
+                    "idle" if coordinator is None else coordinator.state
+                ),
+            )
+            decision = self._decision_engine().decide(context)
+            if decision.primary_decision is not DecisionType.THOUGHT_START:
                 return
 
-            self.thought_service.generate()
+            if self.thought_service.generate():
+                self._last_background_thought_at = monotonic()
         except Exception as exc:
             logger.error(
                 "Background thought start failed (%s).",
