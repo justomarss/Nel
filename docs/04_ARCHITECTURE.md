@@ -51,7 +51,7 @@ This diagram describes the current prototype, not the desired stable runtime.
 ## Decision Boundary
 
 ADR-020 defines Decision Engine v1 as a pure provider-independent routing
-boundary. It receives only bounded operational event data and explicit goal
+boundary. It receives only bounded operational event data and explicit
 command syntax. It selects exactly one route before any provider call and has
 no repository access or write authority.
 

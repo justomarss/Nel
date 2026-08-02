@@ -15,8 +15,10 @@ The provisional inference model is `meta/llama-3.1-70b-instruct`. Automatic
 LLM-generated background thoughts are disabled by default while foreground
 conversation and structured extraction remain active.
 
-The v1.0 release-integrity hardening is implemented. A fresh release backup
-and final end-to-end acceptance audit remain required before tagging v1.0.
+The v1.0 release-integrity hardening and final end-to-end acceptance audit are
+complete. A fresh schema-v4 release backup passed isolated restore and logical
+equality validation. Release materials are prepared for v1.0.0; tagging and
+publication remain explicit operator actions.
 
 ## Supported Development Path
 
@@ -118,7 +120,7 @@ and final end-to-end acceptance audit remain required before tagging v1.0.
 |---|---|
 | Memory | Raw long-term strings; exact lexical relevance and duplicate defense select at most ten complete events, without semantic retrieval |
 | Knowledge | Current values, superseded history, and versioned retirement are transactional; provider candidates are grounded but ephemeral, and durable provenance beyond revision reasons is not implemented |
-| Intent classification | Keyword rules; narrow and not robustly tested |
+| Intent classification | Deterministic phrase rules with deliberately narrow local-read coverage |
 | State | Operational state is an in-memory enum; persistent Nel identity is stored separately and is read into prompts without a conversation write path |
 | Thoughts | Minimal in-memory typed observation pipeline is wired; policies reject permanent changes and automatic generation remains disabled by default |
 | Goals | Explicit storage commands and bounded read-only conversation context are integrated; natural-language inference, planning, reminders, scheduling, actions, and autonomous creation remain absent |
@@ -142,7 +144,7 @@ and final end-to-end acceptance audit remain required before tagging v1.0.
 
 ## Tests
 
-The repository has 295 assertion-based `unittest` cases covering:
+The repository has 300 assertion-based `unittest` cases covering:
 
 - temporary new, correction, reactivation, and same-value fact proposals with
   no provider-authoritative durable writes;
@@ -256,9 +258,9 @@ documents remain present but are non-normative until reconciled.
 
 ## Remaining v1.0 Release Gates
 
-- Create a fresh validated schema-v4 release backup after this hardening.
-- Complete the final end-to-end acceptance audit, including a bounded live
-  provider conversation and immediate clean shutdown.
+- Review the release materials.
+- Commit the release documentation, create the `v1.0.0` tag, and publish the
+  GitHub release only after explicit owner approval.
 
 ## Provisional Baseline Choices
 
