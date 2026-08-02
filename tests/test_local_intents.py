@@ -189,7 +189,12 @@ class LocalIntentIntegrationTests(unittest.TestCase):
             _path, nel = self._runtime(directory, provider)
             nel.knowledge.knowledge.set("favorite_game", "MK11")
             try:
-                response = nel.think("Mənim ən sevdiyim oyun nədir?")
+                with patch.object(
+                    nel.knowledge,
+                    "process",
+                    side_effect=AssertionError("extraction must not run"),
+                ):
+                    response = nel.think("Mənim ən sevdiyim oyun nədir?")
             finally:
                 nel.stop()
 

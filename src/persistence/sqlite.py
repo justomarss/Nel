@@ -7,6 +7,7 @@ from pathlib import Path
 SCHEMA_VERSION = 1
 IDENTITY_SCHEMA_VERSION = 2
 GOAL_SCHEMA_VERSION = 3
+FACT_SCHEMA_VERSION = 4
 ACTIVE_SCHEMA_VERSION = GOAL_SCHEMA_VERSION
 V1_EXPECTED_TABLES = {
     "schema_version",
@@ -149,6 +150,25 @@ GOAL_EXPECTED_COLUMNS = {
     ),
 }
 V3_EXPECTED_COLUMNS = EXPECTED_COLUMNS | GOAL_EXPECTED_COLUMNS
+FACT_EXPECTED_COLUMNS = {
+    "user_facts_current": V1_EXPECTED_COLUMNS["user_facts_current"]
+    + (
+        ("fact_state", "TEXT", 1, 0),
+        ("revision_reason", "TEXT", 0, 0),
+    ),
+    "user_fact_history": V1_EXPECTED_COLUMNS["user_fact_history"]
+    + (
+        ("fact_state", "TEXT", 1, 0),
+        ("revision_reason", "TEXT", 0, 0),
+    ),
+}
+V4_EXPECTED_COLUMNS = V3_EXPECTED_COLUMNS | FACT_EXPECTED_COLUMNS
+FACT_RETIREMENT_COLUMNS = (
+    "fact_state TEXT NOT NULL DEFAULT 'active' "
+    "CHECK (fact_state IN ('active', 'retired'))",
+    "revision_reason TEXT CHECK (revision_reason IS NULL OR "
+    "length(trim(revision_reason)) > 0)",
+)
 
 
 GOAL_SCHEMA_STATEMENTS = (
@@ -491,6 +511,11 @@ class SQLiteDatabase:
             expected_columns = V3_EXPECTED_COLUMNS
             expected_triggers = IDENTITY_TRIGGERS
             expected_indexes = GOAL_INDEX_DEFINITIONS
+        elif expected_version == FACT_SCHEMA_VERSION:
+            expected_tables = V3_EXPECTED_TABLES
+            expected_columns = V4_EXPECTED_COLUMNS
+            expected_triggers = IDENTITY_TRIGGERS
+            expected_indexes = GOAL_INDEX_DEFINITIONS
         else:
             raise UnsupportedSchemaVersion(
                 "Unsupported SQLite schema version."
@@ -579,7 +604,10 @@ class SQLiteDatabase:
                 ):
                     raise RuntimeError("SQLite schema is incompatible.")
 
-            if expected_version == GOAL_SCHEMA_VERSION:
+            if expected_version in {
+                GOAL_SCHEMA_VERSION,
+                FACT_SCHEMA_VERSION,
+            }:
                 goal_tables = {
                     row["name"]: row["sql"]
                     for row in connection.execute(
@@ -594,6 +622,23 @@ class SQLiteDatabase:
                         sql is None
                         or _normalize_schema_sql(sql)
                         != _normalize_schema_sql(expected_sql)
+                    ):
+                        raise RuntimeError("SQLite schema is incompatible.")
+
+            if expected_version == FACT_SCHEMA_VERSION:
+                fact_table_sql = {
+                    row["name"]: row["sql"]
+                    for row in connection.execute(
+                        "SELECT name, sql FROM sqlite_schema "
+                        "WHERE type = 'table' AND name IN "
+                        "('user_facts_current', 'user_fact_history')"
+                    )
+                }
+                for sql in fact_table_sql.values():
+                    normalized = _normalize_schema_sql(sql or "")
+                    if any(
+                        _normalize_schema_sql(definition) not in normalized
+                        for definition in FACT_RETIREMENT_COLUMNS
                     ):
                         raise RuntimeError("SQLite schema is incompatible.")
 

@@ -19,9 +19,14 @@ from src.persistence.goal_migration import (
     GoalMigrationError,
     migrate_goal_schema_v2_to_v3,
 )
+from src.persistence.fact_migration import (
+    FactMigrationError,
+    migrate_fact_schema_v3_to_v4,
+)
 from src.persistence.repositories import SQLiteKnowledge, SQLiteMemory
 from src.persistence.sqlite import (
     GOAL_SCHEMA_VERSION,
+    FACT_SCHEMA_VERSION,
     SCHEMA_VERSION,
     SQLiteDatabase,
     UnsupportedSchemaVersion,
@@ -37,6 +42,8 @@ __all__ = [
     "MigrationResult",
     "IDENTITY_SCHEMA_VERSION",
     "GOAL_SCHEMA_VERSION",
+    "FACT_SCHEMA_VERSION",
+    "FactMigrationError",
     "GoalMigrationError",
     "IdentityMigrationError",
     "SQLiteDatabase",
@@ -47,5 +54,6 @@ __all__ = [
     "migrate_json_to_sqlite",
     "migrate_identity_schema_v1_to_v2",
     "migrate_goal_schema_v2_to_v3",
+    "migrate_fact_schema_v3_to_v4",
     "verify_sqlite_backup",
 ]

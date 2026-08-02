@@ -12,6 +12,9 @@ from src.persistence.identity_migration import (
     IDENTITY_TABLES,
 )
 from src.persistence.sqlite import (
+    FACT_EXPECTED_COLUMNS,
+    FACT_RETIREMENT_COLUMNS,
+    FACT_SCHEMA_VERSION,
     GOAL_EXPECTED_COLUMNS,
     GOAL_INDEX_DEFINITIONS,
     GOAL_SCHEMA_VERSION,
@@ -111,6 +114,8 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
         expected_tables = V1_TABLES | IDENTITY_TABLES
     elif schema_versions == (GOAL_SCHEMA_VERSION,):
         expected_tables = V1_TABLES | IDENTITY_TABLES | GOAL_TABLES
+    elif schema_versions == (FACT_SCHEMA_VERSION,):
+        expected_tables = V1_TABLES | IDENTITY_TABLES | GOAL_TABLES
     else:
         raise BackupValidationError("Backup schema version is incompatible.")
 
@@ -141,11 +146,19 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
     if memory_ids != sorted(memory_ids) or len(memory_ids) != len(set(memory_ids)):
         raise BackupValidationError("Backup memory ordering validation failed.")
 
+    has_fact_retirement = schema_versions == (FACT_SCHEMA_VERSION,)
+    fact_current_columns = (
+        ", fact_state, revision_reason" if has_fact_retirement else ""
+    )
+    fact_history_columns = (
+        ", fact_state, revision_reason" if has_fact_retirement else ""
+    )
     current_fact_rows = tuple(
         tuple(row)
         for row in connection.execute(
-            """
+            f"""
             SELECT fact_key, value, version, updated_at
+                   {fact_current_columns}
             FROM user_facts_current
             ORDER BY fact_key
             """
@@ -154,8 +167,9 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
     history_rows = tuple(
         tuple(row)
         for row in connection.execute(
-            """
+            f"""
             SELECT id, fact_key, value, version, valid_from, superseded_at
+                   {fact_history_columns}
             FROM user_fact_history
             ORDER BY fact_key, version
             """
@@ -166,6 +180,7 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
     has_identity = schema_versions in {
         (IDENTITY_SCHEMA_VERSION,),
         (GOAL_SCHEMA_VERSION,),
+        (FACT_SCHEMA_VERSION,),
     }
     if has_identity:
         identity_current_rows = tuple(
@@ -231,6 +246,53 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
     for row in history_rows:
         _check_utf8(row)
 
+    if has_fact_retirement:
+        table_metadata = {
+            row["name"]: row
+            for row in connection.execute("PRAGMA table_list")
+            if row["name"] in FACT_EXPECTED_COLUMNS
+        }
+        table_sql = {
+            row["name"]: row["sql"]
+            for row in connection.execute(
+                "SELECT name, sql FROM sqlite_schema "
+                "WHERE type = 'table' AND name IN "
+                "('user_facts_current', 'user_fact_history')"
+            )
+        }
+        for table, expected_columns in FACT_EXPECTED_COLUMNS.items():
+            metadata = table_metadata.get(table)
+            if metadata is None or metadata["strict"] != 1:
+                raise BackupValidationError(
+                    "Backup fact schema is incompatible."
+                )
+            columns = tuple(
+                (
+                    row["name"],
+                    row["type"],
+                    row["notnull"],
+                    row["pk"],
+                )
+                for row in connection.execute(f"PRAGMA table_info({table})")
+            )
+            if columns != expected_columns:
+                raise BackupValidationError(
+                    "Backup fact schema is incompatible."
+                )
+            normalized_sql = _normalize_schema_sql(table_sql.get(table) or "")
+            if any(
+                _normalize_schema_sql(definition) not in normalized_sql
+                for definition in FACT_RETIREMENT_COLUMNS
+            ):
+                raise BackupValidationError(
+                    "Backup fact schema is incompatible."
+                )
+        for row in (*current_fact_rows, *history_rows):
+            if row[-2] == "retired" and not row[-1]:
+                raise BackupValidationError(
+                    "Backup retired fact history is inconsistent."
+                )
+
     if has_identity:
         core = {
             row[0]: row[2]
@@ -272,7 +334,10 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
 
     goal_current_rows = ()
     goal_history_rows = ()
-    if schema_versions == (GOAL_SCHEMA_VERSION,):
+    if schema_versions in {
+        (GOAL_SCHEMA_VERSION,),
+        (FACT_SCHEMA_VERSION,),
+    }:
         table_metadata = {
             row["name"]: row
             for row in connection.execute("PRAGMA table_list")
@@ -281,6 +346,19 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
         for table, expected_columns in GOAL_EXPECTED_COLUMNS.items():
             metadata = table_metadata.get(table)
             if metadata is None or metadata["strict"] != 1:
+                raise BackupValidationError(
+                    "Backup goal schema is incompatible."
+                )
+            columns = tuple(
+                (
+                    row["name"],
+                    row["type"],
+                    row["notnull"],
+                    row["pk"],
+                )
+                for row in connection.execute(f"PRAGMA table_info({table})")
+            )
+            if columns != expected_columns:
                 raise BackupValidationError(
                     "Backup goal schema is incompatible."
                 )
@@ -303,20 +381,6 @@ def _read_and_validate(connection: sqlite3.Connection) -> _Snapshot:
                 raise BackupValidationError(
                     "Backup goal schema is incompatible."
                 )
-            columns = tuple(
-                (
-                    row["name"],
-                    row["type"],
-                    row["notnull"],
-                    row["pk"],
-                )
-                for row in connection.execute(f"PRAGMA table_info({table})")
-            )
-            if columns != expected_columns:
-                raise BackupValidationError(
-                    "Backup goal schema is incompatible."
-                )
-
         indexes = {
             row["name"]: (row["tbl_name"], row["sql"])
             for row in connection.execute(

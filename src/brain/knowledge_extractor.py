@@ -9,6 +9,76 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 logger = logging.getLogger(__name__)
 
+QUESTION_MARKS = frozenset({"?", "؟", "﹖", "？"})
+LEADING_INTERROGATIVES = frozenset(
+    {
+        "nə",
+        "nədir",
+        "hansı",
+        "hansıdır",
+        "kim",
+        "kimdir",
+        "harada",
+        "haradadır",
+        "necə",
+        "necədir",
+        "niyə",
+    }
+)
+INTERROGATIVE_TOKENS = frozenset(
+    {"nə", "hansı", "kim", "harada", "necə", "niyə"}
+)
+QUESTION_ENDINGS = frozenset(
+    {
+        "var",
+        "yoxdur",
+        "nədir",
+        "hansıdır",
+        "kimdir",
+        "haradadır",
+        "necədir",
+        "mı",
+        "mi",
+        "mu",
+        "mü",
+    }
+)
+
+
+def _question_tokens(text: str) -> tuple[str, ...]:
+    normalized = unicodedata.normalize("NFKC", text).casefold()
+    normalized = normalized.replace("\N{COMBINING DOT ABOVE}", "")
+    return tuple(re.findall(r"\w+", normalized, flags=re.UNICODE))
+
+
+def is_interrogative_user_input(text: str) -> bool:
+    if not isinstance(text, str) or not text.strip():
+        return True
+    normalized = unicodedata.normalize("NFKC", text)
+    if any(mark in normalized for mark in QUESTION_MARKS):
+        return True
+    tokens = _question_tokens(normalized)
+    if not tokens:
+        return True
+    leading_indefinite_time = tokens[:2] == ("nə", "vaxtsa")
+    if tokens[0] in LEADING_INTERROGATIVES and not leading_indefinite_time:
+        return True
+    if tokens[-1] in QUESTION_ENDINGS:
+        return True
+    interrogative_positions = {
+        index
+        for index, token in enumerate(tokens)
+        if token in INTERROGATIVE_TOKENS
+    }
+    if tokens[:1] == ("mənim",) and interrogative_positions:
+        return True
+    if any(
+        tokens[index : index + 2] == ("nə", "vaxt")
+        for index in range(len(tokens) - 1)
+    ):
+        return True
+    return False
+
 
 def normalize_fact_key(key: str) -> str:
     normalized = unicodedata.normalize("NFKC", key).strip().casefold()
@@ -55,6 +125,9 @@ class KnowledgeExtractor:
         self.brain = brain
 
     def extract(self, text):
+        if is_interrogative_user_input(text):
+            logger.info("Interrogative input excluded from fact extraction.")
+            return {}
         prompt = self._build_prompt(text)
         response = self._generate_structured(prompt)
         envelope, error = self._validate(response)
