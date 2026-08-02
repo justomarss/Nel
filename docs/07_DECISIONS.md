@@ -33,6 +33,306 @@ cannot define identity; public-product concerns are deferred.
 
 Status: Accepted.
 
+## ADR-024: Unified Context Assembly v1
+
+Context: Nel currently assembles identity, goals, active user facts, and
+count-limited memories through separate paths in `Nel`. Those paths have
+individual safeguards but no single serialized-size budget, canonical data
+representation, or deterministic relevance policy. This makes provider
+requests harder to bound, compare, test, and port. Context assembly must
+improve selection and serialization without changing ownership, truth, or
+write authority.
+
+Options: retain the distributed prompt construction; let each service append
+its own prompt fragment; ask a provider or embedding model to select context;
+or introduce one deterministic read-only assembly boundary. Distributed
+construction cannot enforce one budget. Service-owned prompt fragments
+duplicate serialization and priority rules. Model-based selection adds
+provider authority, latency, nondeterminism, and another failure path. The
+accepted option is one provider-independent `ContextAssembler` using bounded
+service snapshots and pure deterministic selectors.
+
+Decision: Context assembly is a read-only operation. It receives the current
+user message, reads immutable bounded snapshots through service APIs, selects
+relevant complete records, applies one total serialized-character budget, and
+returns an immutable result. It never calls repositories or providers,
+performs writes, mutates records, decides truth, resolves contradictions, or
+creates summaries. Existing services retain ownership and all write authority.
+
+The only supported context sources are:
+
+- Nel's atomic core identity;
+- relevant established and provisional Nel preferences;
+- active user facts;
+- active and paused goals;
+- relevant recent completed or cancelled goals;
+- long-term memory events.
+
+Retired facts, candidate or retired preferences, raw thought output, histories,
+legacy thought JSON, provider-generated proposals, secrets, and credentials
+are excluded. No stored data may be appended elsewhere in the provider prompt.
+
+The immutable provider-facing model is:
+
+```text
+ContextBundle
+- identity
+- user_facts
+- goals
+- memories
+- truncation_metadata
+```
+
+The immutable assembly result is:
+
+```text
+ContextAssemblyResult
+- bundle
+- canonical_json
+- serialized_characters
+- context_digest
+```
+
+`canonical_json` is the exact data-context string placed in the provider
+prompt. `serialized_characters` is exactly `len(canonical_json)`. The digest is
+SHA-256 over the UTF-8 bytes of `canonical_json`. Neither the digest nor the
+character count appears inside the provider-facing JSON, so no recursive or
+iterative calculation exists. Diagnostics are not sent to the provider unless
+a future decision explicitly requires a safe diagnostic field. The bundle's
+`truncation_metadata` contains only provider-useful structural status, such as
+an omitted optional section and its safe reason code; it contains no private
+values or diagnostic hashes.
+
+Canonical JSON uses UTF-8, `ensure_ascii=False`, sorted object keys, compact
+separators, stable list ordering, no non-finite numbers, and no insignificant
+whitespace. Character counting uses Python Unicode code points. Selection
+never cuts a string, JSON object, record, or Unicode code point. The output
+must remain valid JSON after every omission.
+
+The default v1 data-context budget is a hard maximum of 12,000 serialized
+characters. It includes section names, keys, values, punctuation, metadata,
+and all JSON overhead in `canonical_json`. It is a ceiling, not a fill target.
+Only relevant records are normally included, unused budget remains unused,
+and irrelevant records are never added merely because space remains. Ordinary
+bundles should be substantially smaller than 12,000 characters.
+
+The 12,000-character limit is accepted provisionally because it is simple,
+provider-independent, and large enough for bounded relevant context. It does
+not guarantee a provider token count and may still affect latency with the
+provisional 70B model. Provider-specific token counting remains deferred. The
+current user message remains subject to the existing 4,096-character Decision
+Engine limit. Static system instructions and prompt scaffolding receive a
+separate 8,192-character limit. Exceeding any limit fails safely; user or
+system text is not silently truncated.
+
+Before total-budget packing, v1 preserves these record safeguards:
+
+```text
+active user facts:              maximum 20
+active or paused goals:         maximum 10
+terminal goals:                 maximum 5
+established preferences:        maximum 10
+provisional preferences:        maximum 10
+memories:                       maximum 10
+individual memory text:         maximum 2,000 characters
+```
+
+An oversized optional record is omitted whole. An oversized core identity
+fails assembly. Existing goal safeguards of ten active or paused and five
+terminal goals are preserved.
+
+Relevance normalization is used only for classification and duplicate
+detection. It applies Unicode NFKC, case-folding, Unicode-whitespace collapse,
+outer whitespace trimming, and tokenization into contiguous Unicode
+alphanumeric sequences; underscores are token boundaries. Original stored
+text is never rewritten. No Azerbaijani-topic mapping, synonym table,
+embedding, vector search, provider call, or semantic inference participates.
+
+For a query and record, selectors calculate this lexicographically ordered
+tuple:
+
+```text
+(
+  exact_value_or_text_phrase_match,
+  exact_key_or_title_phrase_match,
+  distinct_token_overlap_count
+)
+```
+
+True sorts before false and higher overlap sorts first. A record is relevant
+only when at least one component is non-zero. Stable source identifiers resolve
+remaining ties. Hash-randomized or repository-return ordering must never affect
+selection. False negatives are acceptable.
+
+Records are considered in this exact global priority order:
+
+1. complete core Nel identity;
+2. relevant current user facts;
+3. relevant active or paused goals;
+4. relevant established preferences;
+5. relevant memories;
+6. relevant provisional preferences;
+7. relevant recent terminal goals.
+
+The assembler considers complete records in deterministic order. It includes a
+record only if the resulting `canonical_json` remains within 12,000 characters;
+otherwise it omits that record and considers the next eligible record. A
+lower-priority record never displaces an accepted higher-priority record. Core
+identity is one mandatory atomic record and is never partially truncated.
+
+User facts: only active facts are candidates. Exact value phrase, exact
+readable-key phrase, key-token overlap, value-token overlap, and normalized key
+ascending determine order. Readable keys are derived generically by splitting
+normalized keys on underscores. For an explicit broad user-profile query
+recognized deterministically by the local intent layer, a bounded fallback of
+up to 20 active facts may be selected by normalized key even without overlap.
+Local user-fact queries remain local and must fail safely if facts cannot be
+read; they must never return an empty-list answer that implies no facts exist.
+The assembler does not resolve conflicts between facts and memories. Prompt
+instructions continue to state that current structured facts override
+conflicting raw memories when facts are available.
+
+Goals: active precedes paused, high priority precedes normal and low, relevant
+precedes unrelated within an explicit broad goal query, higher relevance
+precedes lower relevance, newer `updated_at` precedes older, and stable goal ID
+ascending resolves ties. Ordinary conversation includes relevant goals only.
+Terminal goals are relevant-only, ordered by relevance, recency, and stable ID,
+and are considered last. Goal history is excluded. Included goals grant no
+authority to act.
+
+Memories: records longer than 2,000 characters are omitted whole. The assembler
+uses the accepted MemoryService NFKC, case-fold, Unicode-whitespace, and SHA-256
+fingerprint algorithm for duplicate defense, keeping the earliest stable event
+among exact normalized duplicates. Relevant memories precede unrelated
+memories; ordinary conversation includes relevant memories only. Higher
+relevance precedes recency, and stable insertion ID resolves ties. Therefore an
+older relevant memory beats an unrelated newer memory. At most ten memories
+are included. Memory text is never rewritten, summarized, or truncated.
+
+Identity: identity ID, display name, artificial nature, and role form the atomic
+mandatory core. Established preferences are not included merely because they
+are established. They are relevant-only during ordinary conversation. An
+explicit broad identity or preference query recognized deterministically by
+the local intent layer may include a bounded fallback set, ordered by stable
+normalized preference key. Provisional preferences are always relevant-only,
+explicitly labeled provisional, and lower priority than memories. Candidate
+and retired preferences are excluded. Empty remaining budget never justifies
+adding an irrelevant preference. Controlled Azerbaijani rendering remains a
+derived presentation concern, is explicitly distinguished from stored values,
+and must be included inside measured `canonical_json` when sent to a provider;
+it never changes persistence.
+
+Failure behavior is source-specific and fail-closed with respect to authority:
+
+- Core identity read failure aborts the conversational provider route with
+  `identity_context_unavailable`. Nel must not answer without authoritative
+  identity.
+- User-fact read failure omits the fact section and continues with safe bundle
+  metadata `fact_context_omitted`. The prompt must then include a strict static
+  rule: user facts are unavailable for this turn; do not invent, infer, or
+  assert personal facts about the user. Local user-fact queries fail safely
+  instead of pretending there are no stored facts.
+- Goal read failure omits goals and continues with `goal_context_omitted`.
+- Memory read failure omits memories and continues with
+  `memory_context_omitted`.
+- If core identity is valid but preference retrieval can fail independently,
+  preferences are omitted with `identity_preferences_omitted`. If the service
+  cannot separate core and preference reads, the identity failure remains
+  hard in v1.
+- Serialization failure aborts the provider route with
+  `context_serialization_failed`.
+- Oversized mandatory identity aborts with `mandatory_identity_oversized`.
+- An oversized optional record is omitted with `record_oversized`.
+
+Failures never trigger direct repository reads, unbounded fallback context,
+provider-generated summaries, or a more permissive route. Logs may contain
+only safe reason codes, included and omitted counts, section sizes, total size,
+budget, and digest. They must not contain stored values, prompts, provider
+output, or credentials.
+
+The smallest architecture is:
+
+```text
+IdentityService  ----\
+KnowledgeService -----\
+GoalService ----------- > ContextAssembler -> ContextAssemblyResult
+MemoryService --------/          |                    |
+                                |                    +-> safe diagnostics
+                                v
+                         canonical_json
+                                |
+                                v
+                     canonical prompt builder
+                                |
+                                v
+                             provider
+```
+
+The assembler depends on immutable service read APIs, not repositories.
+Where existing APIs lack stable IDs, timestamps, states, or separate failure
+signals, they may gain narrowly scoped read-only snapshot methods. The minimal
+components are immutable `ContextBudget`, `ContextBundle`, and
+`ContextAssemblyResult` models; pure deterministic selectors; one
+`ContextAssembler`; and one canonical serializer.
+
+Future integration order is:
+
+```text
+Decision Engine
+-> conversation_response
+-> local intents
+-> Knowledge candidate extraction when applicable
+-> ContextAssembler
+-> canonical prompt builder
+-> provider
+```
+
+Local commands and local read routes remain outside provider context assembly.
+Knowledge Grounding proposals remain temporary and outside `ContextBundle`.
+Decision Engine precedence, service write boundaries, persistence, commands,
+and provider authority do not change.
+
+Implementation should proceed in these smallest reversible stages:
+
+1. Add frozen context models, budget validation, canonical serialization, and
+   digest tests without runtime integration.
+2. Add shared pure normalization, relevance, duplicate, and complete-record
+   packing functions with exhaustive deterministic tests.
+3. Add only the bounded read-only service snapshot APIs needed for stable
+   metadata and source-specific failure handling.
+4. Implement `ContextAssembler` and temporary-data-only source failure tests.
+5. Integrate it into the existing conversation route while preserving local
+   intents, Knowledge Grounding, commands, and provider behavior.
+6. Remove obsolete distributed prompt-context assembly only after full
+   regression, provider-independence, no-write, and production-hash checks.
+
+Required tests cover identical bundle JSON and digest, the 12,000-character
+ceiling, substantially smaller relevance-only ordinary bundles, valid JSON
+after omission, complete atomic identity, active-only facts, retired-fact
+exclusion, fact omission safeguards, local fact-query failure, goal priority,
+relevant older memory selection, duplicate memory defense, stable tie-breaking,
+Unicode and Azerbaijani casing, whole-record omission, relevant-only identity
+preferences, every source failure, safe diagnostics, no provider call, no
+repository access, no write, provider-independent output, and no production
+modification.
+
+Deferred scope includes embeddings, vector databases, model-generated
+summaries, semantic compression, learned relevance, automatic memory
+importance, cross-turn context caches, context persistence, provider-specific
+token counting, multimodal context, tool-result context, adaptive budgets,
+query rewriting, Azerbaijani morphology analyzers, and contradiction
+resolution.
+
+Consequences: Nel gains one measurable provider-independent context boundary,
+predictable prompt-data size, deterministic relevance, safe optional-source
+degradation, and digest-based diagnostics. Character budgets remain an
+imperfect proxy for tokens; exact lexical relevance will miss paraphrases and
+Azerbaijani morphology; service read APIs need small extensions; identity
+failure intentionally makes conversation unavailable; and fact omission
+requires strict prompt behavior to prevent unsupported personal claims.
+
+Status: Accepted.
+
 ## ADR-022: Memory Audit and Retention Policy v1
 
 Context: Nel's active runtime has no `MemoryService`. `Nel.think()` calls the
