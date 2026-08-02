@@ -193,6 +193,7 @@ class LocalIntentIntegrationTests(unittest.TestCase):
             provider = RecordingProvider()
             _path, nel = self._runtime(directory, provider)
             nel.knowledge.knowledge.set("favorite_game", "MK11")
+            nel.knowledge.knowledge.set("favorite_anime", "AoT")
             try:
                 with patch.object(
                     nel.knowledge,
@@ -203,7 +204,30 @@ class LocalIntentIntegrationTests(unittest.TestCase):
             finally:
                 nel.stop()
 
-        self.assertIn("favorite game: MK11", response)
+        self.assertEqual(
+            response,
+            "Sənin ən sevdiyin anime AoT-dir və ən sevdiyin game MK11-dir.",
+        )
+        self.assertEqual(response.count("Sənin "), 1)
+        self.assertEqual(response.count("ən sevdiyin "), 2)
+        self.assertNotIn("sevdiyim", response)
+        self.assertEqual(provider.prompts, [])
+
+    def test_unknown_fact_keys_keep_second_person_ownership(self):
+        with tempfile.TemporaryDirectory() as directory:
+            provider = RecordingProvider()
+            _path, nel = self._runtime(directory, provider)
+            nel.knowledge.knowledge.set("preferred_language", "Azərbaycan dili")
+            try:
+                response = nel.think("Mənim haqqında nə bilirsən?")
+            finally:
+                nel.stop()
+
+        self.assertEqual(
+            response,
+            "Sənin preferred language məlumatın Azərbaycan dili-dir.",
+        )
+        self.assertNotIn("məlumatım", response)
         self.assertEqual(provider.prompts, [])
 
     def test_goal_aspiration_returns_clarification_without_writing(self):

@@ -1,5 +1,7 @@
 import json
 import logging
+import re
+import unicodedata
 from time import monotonic
 from uuid import uuid4
 
@@ -355,10 +357,22 @@ Nel:
         facts = self.knowledge.facts()
         if not facts:
             return "Sənin haqqında saxlanmış strukturlaşdırılmış məlumat yoxdur."
-        lines = ["Sənin haqqında bildiklərim:"]
-        for key, value in sorted(facts.items()):
-            lines.append(f"- {key.replace('_', ' ')}: {value}")
-        return "\n".join(lines)
+        clauses = []
+        for index, (key, value) in enumerate(sorted(facts.items())):
+            owner = "Sənin " if index == 0 else ""
+            clauses.append(
+                f"{owner}{self._user_fact_label(key)} {value}-dir"
+            )
+        return " və ".join(clauses) + "."
+
+    @staticmethod
+    def _user_fact_label(key: str) -> str:
+        normalized = unicodedata.normalize("NFKC", key).strip().casefold()
+        tokens = tuple(token for token in re.split(r"[_\W]+", normalized) if token)
+        if len(tokens) > 1 and tokens[0] == "favorite":
+            return "ən sevdiyin " + " ".join(tokens[1:])
+        readable = " ".join(tokens) or "naməlum"
+        return f"{readable} məlumatın"
 
     @staticmethod
     def _render_identity_context(context: dict) -> dict:
