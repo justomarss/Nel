@@ -138,7 +138,7 @@ class IdentityContextTests(unittest.TestCase):
             provider = PromptProvider(respond)
             nel = self._nel(database, provider, service)
             try:
-                response = nel.think("Sən kimsən?")
+                response = nel.think("Öz kimliyini ətraflı təsvir et.")
             finally:
                 nel.stop()
 
@@ -174,7 +174,7 @@ class IdentityContextTests(unittest.TestCase):
             provider = PromptProvider(respond)
             nel = self._nel(database, provider)
             try:
-                response = nel.think("Sən kimsən?")
+                response = nel.think("Öz kimliyini ətraflı təsvir et.")
             finally:
                 nel.stop()
 
@@ -327,7 +327,7 @@ class IdentityContextTests(unittest.TestCase):
                 database_path=path,
             )
             try:
-                first.think("Sən kimsən?")
+                first.think("Öz kimliyini ətraflı təsvir et.")
             finally:
                 first.stop()
 
@@ -337,7 +337,7 @@ class IdentityContextTests(unittest.TestCase):
                 database_path=path,
             )
             try:
-                second.think("Sən kimsən?")
+                second.think("Öz kimliyini ətraflı təsvir et.")
             finally:
                 second.stop()
 

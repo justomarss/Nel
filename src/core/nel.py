@@ -35,6 +35,7 @@ from src.services.knowledge_service import KnowledgeService
 from src.thoughts import ThoughtCoordinator, ThoughtWorker
 
 from src.brain.intent_classifier import IntentClassifier
+from src.brain.local_intent_classifier import IntentType, LocalIntentClassifier
 
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,17 @@ IDENTITY_PROMPT_RENDERINGS = {
     "nature": {
         "artificial": "süni",
     },
+    "role": {
+        "Ömər’s persistent digital companion": (
+            "Ömərin davamlı rəqəmsal yoldaşı"
+        ),
+    },
 }
+
+GOAL_CREATION_CLARIFICATION = (
+    "Davamlı məqsəd yaratmaq üçün açıq /goal create əmri istifadə "
+    "edilməlidir."
+)
 
 
 class Nel:
@@ -82,6 +93,7 @@ class Nel:
         self.state = StateManager()
         self.decision = DecisionEngine()
         self.intent = IntentClassifier()
+        self.local_intent = LocalIntentClassifier()
 
         self.knowledge = KnowledgeService(
             self.brain,
@@ -150,6 +162,18 @@ class Nel:
                 )
             if decision.primary_decision is DecisionType.ASK_CLARIFICATION:
                 return goal_commands.clarification_response(command_parse)
+
+            local_classifier = getattr(self, "local_intent", None)
+            if local_classifier is not None:
+                if local_classifier.requires_explicit_goal_command(prompt):
+                    return GOAL_CREATION_CLARIFICATION
+                local_intent = local_classifier.classify(prompt)
+                if local_intent is IntentType.GOAL_LIST:
+                    return goal_commands.list_goals()
+                if local_intent is IntentType.IDENTITY_QUERY:
+                    return self._local_identity_response()
+                if local_intent is IntentType.USER_FACT_QUERY:
+                    return self._local_user_fact_response()
 
             identity_context = self._identity_context()
             goal_context = self._goal_context()
@@ -301,6 +325,27 @@ Nel:
         if serializer is None:
             serializer = GoalContextSerializer()
         return serializer.serialize(goals)
+
+    def _local_identity_response(self) -> str:
+        context = self._render_identity_context(self._identity_context())
+        fields = (
+            ("Adım", context.get("display_name")),
+            ("Təbiətim", context.get("nature")),
+            ("Rolum", context.get("role")),
+        )
+        parts = [f"{label}: {value}" for label, value in fields if value]
+        if not parts:
+            return "Nel kimliyi əlçatan deyil."
+        return ". ".join(parts) + "."
+
+    def _local_user_fact_response(self) -> str:
+        facts = self.knowledge.facts()
+        if not facts:
+            return "Sənin haqqında saxlanmış strukturlaşdırılmış məlumat yoxdur."
+        lines = ["Sənin haqqında bildiklərim:"]
+        for key, value in sorted(facts.items()):
+            lines.append(f"- {key.replace('_', ' ')}: {value}")
+        return "\n".join(lines)
 
     @staticmethod
     def _render_identity_context(context: dict) -> dict:

@@ -209,6 +209,11 @@ class GoalCommandHandler:
             )
         return "\n".join(lines)
 
+    def list_goals(self) -> str:
+        if self._service is None:
+            return "Məqsəd xidməti əlçatan deyil."
+        return self._list()
+
     def _update_state(self, command) -> str:
         states = {
             "pause": GoalState.PAUSED,
