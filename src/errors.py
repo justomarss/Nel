@@ -14,6 +14,11 @@ class PersistenceStartupError(NelError):
     pass
 
 
+class PersistenceOperationError(ApplicationError):
+    def __init__(self):
+        super().__init__("Yaddaş xidməti hazırda əlçatan deyil.")
+
+
 class ContextAssemblyError(ApplicationError):
     def __init__(self, reason_code: str):
         super().__init__("Söhbət konteksti hazırda əlçatan deyil.")

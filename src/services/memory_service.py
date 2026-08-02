@@ -1,9 +1,11 @@
 import logging
+import sqlite3
 from dataclasses import dataclass
 from enum import Enum
 
 from src.context.models import MemoryContextSnapshot
 from src.memory.normalization import memory_fingerprint, normalize_memory_text
+from src.errors import PersistenceOperationError
 
 
 logger = logging.getLogger(__name__)
@@ -46,27 +48,33 @@ class MemoryService:
         return self._repository
 
     def recall(self, limit=None):
-        return self._repository.recall(limit=limit)
+        try:
+            return self._repository.recall(limit=limit)
+        except (OSError, sqlite3.Error):
+            raise PersistenceOperationError() from None
 
     def context_snapshot(self, limit=1000) -> tuple[MemoryContextSnapshot, ...]:
         if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
             raise ValueError("Memory context limit must be a non-negative integer.")
-        reader = getattr(self._repository, "context_snapshot", None)
-        if callable(reader):
-            rows = reader(limit=limit)
-            return tuple(
-                MemoryContextSnapshot(
-                    event_id=row["event_id"],
-                    stored_at=row["stored_at"],
-                    text=row["text"],
+        try:
+            reader = getattr(self._repository, "context_snapshot", None)
+            if callable(reader):
+                rows = reader(limit=limit)
+                return tuple(
+                    MemoryContextSnapshot(
+                        event_id=row["event_id"],
+                        stored_at=row["stored_at"],
+                        text=row["text"],
+                    )
+                    for row in rows
                 )
-                for row in rows
+            memories = self._repository.recall(limit=limit)
+            return tuple(
+                MemoryContextSnapshot(index, None, text)
+                for index, text in enumerate(memories, start=1)
             )
-        memories = self._repository.recall(limit=limit)
-        return tuple(
-            MemoryContextSnapshot(index, None, text)
-            for index, text in enumerate(memories, start=1)
-        )
+        except (OSError, sqlite3.Error):
+            raise PersistenceOperationError() from None
 
     def remember_explicit(self, text: str) -> MemoryWriteResult:
         if not isinstance(text, str) or not normalize_memory_text(text):
@@ -81,7 +89,7 @@ class MemoryService:
                 ):
                     return self._result(MemoryWriteStatus.DUPLICATE)
             self._repository.remember(text)
-        except Exception as exc:
+        except (OSError, sqlite3.Error) as exc:
             logger.error(
                 "Explicit memory write failed (%s).",
                 type(exc).__name__,

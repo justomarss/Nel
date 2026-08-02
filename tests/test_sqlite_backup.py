@@ -14,6 +14,9 @@ from src.persistence import (
     backup_sqlite_database,
     verify_sqlite_backup,
 )
+from src.persistence.fact_migration import migrate_fact_schema_v3_to_v4
+from src.persistence.goal_migration import migrate_goal_schema_v2_to_v3
+from src.persistence.identity_migration import migrate_identity_schema_v1_to_v2
 
 
 class SQLiteBackupTests(unittest.TestCase):
@@ -30,6 +33,13 @@ class SQLiteBackupTests(unittest.TestCase):
         knowledge.set("name", "Ömər")
         knowledge.set("favorite_anime", "Bleach")
         knowledge.set("favorite_anime", "AoT")
+        return database
+
+    def create_schema_v4_database(self, directory, name="source-v4.sqlite3"):
+        database = self.create_populated_database(directory, name)
+        migrate_identity_schema_v1_to_v2(database)
+        migrate_goal_schema_v2_to_v3(database)
+        migrate_fact_schema_v3_to_v4(database)
         return database
 
     def file_hash(self, path):
@@ -168,6 +178,28 @@ class SQLiteBackupTests(unittest.TestCase):
 
             with self.assertRaises(BackupValidationError):
                 verify_sqlite_backup(backup)
+
+    def test_schema_v4_backup_missing_identity_trigger_is_rejected(self):
+        for trigger in (
+            "nel_identity_core_no_update",
+            "nel_identity_core_no_delete",
+        ):
+            with self.subTest(trigger=trigger), tempfile.TemporaryDirectory() as directory:
+                database = self.create_schema_v4_database(directory)
+                with database.transaction() as connection:
+                    connection.execute(f"DROP TRIGGER {trigger}")
+
+                with self.assertRaises(BackupValidationError):
+                    verify_sqlite_backup(database.path)
+
+    def test_schema_v4_backup_requires_goal_index(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = self.create_schema_v4_database(directory)
+            with database.transaction() as connection:
+                connection.execute("DROP INDEX goals_current_state_updated_idx")
+
+            with self.assertRaises(BackupValidationError):
+                verify_sqlite_backup(database.path)
 
     def test_incompatible_schema_version_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

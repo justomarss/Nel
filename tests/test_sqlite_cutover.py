@@ -362,8 +362,9 @@ class SQLiteCutoverTests(unittest.TestCase):
                 output=output,
             )
 
-            self.assertEqual(result, 0)
+            self.assertEqual(result, 1)
             rendered = output.getvalue()
+            self.assertIn("historical_schema_v1_tool_retired", rendered)
             for private_value in (
                 "Gizli yaddaş",
                 "Ömərin qeydi",
@@ -387,6 +388,17 @@ class SQLiteCutoverTests(unittest.TestCase):
             self.assertEqual(result, 1)
             self.assertNotIn("LEAK-ME", output.getvalue())
             self.assertIn("STATUS FAIL", output.getvalue())
+
+    def test_historical_cli_refuses_every_command(self):
+        for command in ("rehearse", "verify", "cutover"):
+            with self.subTest(command=command):
+                output = io.StringIO()
+                result = sqlite_cutover.main([command], output=output)
+                self.assertEqual(result, 1)
+                self.assertIn(
+                    "historical_schema_v1_tool_retired",
+                    output.getvalue(),
+                )
 
     def test_migrated_data_is_complete_without_history(self):
         with tempfile.TemporaryDirectory() as directory:

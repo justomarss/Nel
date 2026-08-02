@@ -214,7 +214,10 @@ class GoalCommandHandler:
     def list_goals(self) -> str:
         if self._service is None:
             return "Məqsəd xidməti əlçatan deyil."
-        return self._list()
+        try:
+            return self._list()
+        except GoalRepositoryError:
+            return "Məqsəd xidməti hazırda əlçatan deyil."
 
     def _update_state(self, command) -> str:
         states = {

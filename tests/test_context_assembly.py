@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from src.context import ContextAssembler, ContextBudget
-from src.errors import ContextAssemblyError
+from src.errors import ContextAssemblyError, PersistenceOperationError
 from src.goals import (
     GoalOwner,
     GoalPriority,
@@ -14,6 +14,7 @@ from src.goals import (
     GoalSourceKind,
     GoalState,
 )
+from src.goals.repository import GoalRepositoryError
 from src.identity.models import IdentityRecord, IdentitySnapshot
 from src.context.models import FactContextSnapshot, MemoryContextSnapshot
 from src.context.assembler import canonical_json
@@ -221,7 +222,9 @@ class ContextAssemblyTests(unittest.TestCase):
 
     def test_identity_failure_and_oversized_identity_abort(self):
         with self.assertRaises(ContextAssemblyError) as raised:
-            self.assembler(identity=IdentitySource(error=RuntimeError())).assemble("Salam")
+            self.assembler(
+                identity=IdentitySource(error=PersistenceOperationError())
+            ).assemble("Salam")
         self.assertEqual(raised.exception.reason_code, "identity_context_unavailable")
 
         huge = identity_snapshot(role="x" * 2000)
@@ -248,11 +251,26 @@ class ContextAssemblyTests(unittest.TestCase):
         )
 
     def test_fact_failure_is_omitted_with_safe_metadata(self):
-        result = self.assembler(facts=FactSource(error=RuntimeError("PRIVATE"))).assemble("Salam")
+        result = self.assembler(
+            facts=FactSource(error=PersistenceOperationError())
+        ).assemble("Salam")
         self.assertEqual(result.bundle.user_facts, ())
         metadata = result.bundle.truncation_metadata
         self.assertIn("fact_context_omitted", metadata.omission_reason_codes)
         self.assertNotIn("PRIVATE", json.dumps(asdict_safe(metadata), ensure_ascii=False))
+
+    def test_malformed_fact_snapshot_omits_entire_fact_section(self):
+        result = self.assembler(
+            facts=FactSource(
+                (FactContextSnapshot("name", "Ömər"), object())
+            )
+        ).assemble("Mənim haqqında nə bilirsən?")
+
+        self.assertEqual(result.bundle.user_facts, ())
+        self.assertIn(
+            "fact_context_omitted",
+            result.bundle.truncation_metadata.omission_reason_codes,
+        )
 
     def test_goal_order_and_terminal_relevance(self):
         source = GoalSource(
@@ -271,9 +289,20 @@ class ContextAssemblyTests(unittest.TestCase):
         )
 
     def test_goal_failure_is_omitted(self):
-        result = self.assembler(goals=GoalSource(error=RuntimeError())).assemble("Salam")
+        result = self.assembler(
+            goals=GoalSource(error=GoalRepositoryError("PRIVATE"))
+        ).assemble("Salam")
         self.assertEqual(result.bundle.goals, ())
         self.assertIn("goal_context_omitted", result.bundle.truncation_metadata.omission_reason_codes)
+
+    def test_malformed_goal_snapshot_is_omitted(self):
+        result = self.assembler(goals=GoalSource((object(),))).assemble("Salam")
+
+        self.assertEqual(result.bundle.goals, ())
+        self.assertIn(
+            "goal_context_omitted",
+            result.bundle.truncation_metadata.omission_reason_codes,
+        )
 
     def test_memory_relevance_duplicate_and_recency_order(self):
         memories = MemorySource(
@@ -295,8 +324,19 @@ class ContextAssemblyTests(unittest.TestCase):
         self.assertEqual(result.bundle.memories, ())
         self.assertIn("record_oversized", result.bundle.truncation_metadata.omission_reason_codes)
 
-        failed = self.assembler(memories=MemorySource(error=RuntimeError())).assemble("x")
+        failed = self.assembler(
+            memories=MemorySource(error=PersistenceOperationError())
+        ).assemble("x")
         self.assertIn("memory_context_omitted", failed.bundle.truncation_metadata.omission_reason_codes)
+
+    def test_malformed_memory_snapshot_is_omitted(self):
+        result = self.assembler(memories=MemorySource((object(),))).assemble("x")
+
+        self.assertEqual(result.bundle.memories, ())
+        self.assertIn(
+            "memory_context_omitted",
+            result.bundle.truncation_metadata.omission_reason_codes,
+        )
 
     def test_preferences_are_relevant_only_and_state_ordered(self):
         source = IdentitySource(
@@ -320,6 +360,35 @@ class ContextAssemblyTests(unittest.TestCase):
         )
         self.assertNotIn("gizli", result.canonical_json)
         self.assertNotIn("çıxmamalıdır", result.canonical_json)
+
+    def test_malformed_preference_is_separable_but_core_is_mandatory(self):
+        malformed = SimpleNamespace(
+            preference_state="established",
+            key="favorite_color",
+            value="göy",
+        )
+        result = self.assembler(
+            identity=IdentitySource(identity_snapshot((malformed,)))
+        ).assemble("Sən kimsən?")
+
+        self.assertEqual(result.bundle.identity.identity_id, "nel")
+        self.assertEqual(result.bundle.identity.established_preferences, ())
+        self.assertIn(
+            "identity_preferences_omitted",
+            result.bundle.truncation_metadata.omission_reason_codes,
+        )
+
+        malformed_core = SimpleNamespace(
+            identity_id="nel",
+            display_name="Nel",
+            nature="artificial",
+            role="companion",
+            preferences=(),
+        )
+        with self.assertRaises(ContextAssemblyError):
+            self.assembler(
+                identity=IdentitySource(malformed_core)
+            ).assemble("Salam")
 
     def test_broad_identity_query_uses_bounded_fallback(self):
         source = IdentitySource(identity_snapshot((preference("response_style", "qısa"),)))
@@ -376,7 +445,7 @@ class ContextAssemblyTests(unittest.TestCase):
         nel.memory = SimpleNamespace()
         nel.brain = Brain()
         nel.context_assembler = self.assembler(
-            facts=FactSource(error=RuntimeError("PRIVATE"))
+            facts=FactSource(error=PersistenceOperationError())
         )
 
         self.assertEqual(nel.think("Salam"), "cavab")
@@ -402,7 +471,7 @@ class ContextAssemblyTests(unittest.TestCase):
     def test_local_fact_read_failure_is_not_reported_as_empty(self):
         nel = Nel.__new__(Nel)
         nel.knowledge = SimpleNamespace(
-            facts=lambda: (_ for _ in ()).throw(RuntimeError("PRIVATE"))
+            facts=lambda: (_ for _ in ()).throw(PersistenceOperationError())
         )
         response = nel._local_user_fact_response()
         self.assertIn("əlçatan deyil", response)

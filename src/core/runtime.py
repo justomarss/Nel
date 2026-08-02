@@ -1,8 +1,14 @@
 import sqlite3
 
-from src.core.config import NEL_DATABASE_PATH
+from src.brain.providers import NvidiaNimProvider
+from src.core.config import ConfigurationError, load_runtime_config
 from src.core.nel import Nel
-from src.errors import ApplicationError, PersistenceStartupError, ProviderError
+from src.errors import (
+    ApplicationError,
+    PersistenceOperationError,
+    PersistenceStartupError,
+    ProviderError,
+)
 from src.goals import GoalRepository, GoalService
 from src.identity import IdentityRepository, IdentityService
 from src.persistence.identity_migration import IDENTITY_BOOTSTRAP
@@ -19,8 +25,28 @@ def create_runtime_nel(
     nel_factory=Nel,
     provider=None,
     database_path=None,
+    environment=None,
 ):
-    target_path = NEL_DATABASE_PATH if database_path is None else database_path
+    try:
+        configuration = load_runtime_config(
+            environment,
+            require_provider=provider is None,
+        )
+        target_path = (
+            configuration.database_path
+            if database_path is None
+            else database_path
+        )
+        if provider is None:
+            provider = NvidiaNimProvider(
+                model=configuration.nvidia_model,
+                api_key=configuration.nvidia_api_key,
+                base_url=configuration.nvidia_base_url,
+                timeout=configuration.nvidia_timeout_seconds,
+            )
+    except (ConfigurationError, ProviderError):
+        raise ApplicationError("Runtime configuration is invalid.") from None
+
     try:
         database = SQLiteDatabase(
             target_path,
@@ -37,17 +63,17 @@ def create_runtime_nel(
             "role": identity_snapshot.role,
         } != IDENTITY_BOOTSTRAP:
             raise RuntimeError("Identity bootstrap is incompatible.")
-    except (OSError, RuntimeError, sqlite3.Error):
+    except (OSError, RuntimeError, sqlite3.Error, PersistenceOperationError):
         raise PersistenceStartupError(SQLITE_STARTUP_ERROR) from None
 
     arguments = {
+        "provider": provider,
+        "enable_background_thoughts": configuration.enable_background_thoughts,
         "memory_service": MemoryService(SQLiteMemory(database)),
         "knowledge_repository": SQLiteKnowledge(database),
         "identity_service": identity,
         "goal_service": goals,
     }
-    if provider is not None:
-        arguments["provider"] = provider
     try:
         return nel_factory(**arguments)
     except ProviderError:

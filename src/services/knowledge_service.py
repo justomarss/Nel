@@ -1,4 +1,5 @@
 import logging
+import sqlite3
 import shlex
 from dataclasses import dataclass
 
@@ -11,6 +12,7 @@ from src.knowledge import (
 )
 from src.persistence.normalization import normalize_fact_key
 from src.context.models import FactContextSnapshot
+from src.errors import PersistenceOperationError
 
 
 logger = logging.getLogger(__name__)
@@ -90,10 +92,16 @@ class KnowledgeService:
         return FactProposal(candidate, proposal_type)
 
     def get(self, key):
-        return self.knowledge.get(key)
+        try:
+            return self.knowledge.get(key)
+        except (OSError, sqlite3.Error):
+            raise PersistenceOperationError() from None
 
     def facts(self):
-        return self.knowledge.load()
+        try:
+            return self.knowledge.load()
+        except (OSError, sqlite3.Error):
+            raise PersistenceOperationError() from None
 
     def context_snapshot(self, limit=1000) -> tuple[FactContextSnapshot, ...]:
         if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
@@ -111,8 +119,11 @@ class KnowledgeService:
         normalized_key = normalize_fact_key(key)
         if not normalized_key:
             raise ValueError("Fact key must be non-empty.")
-        before = self.knowledge.get(normalized_key)
-        self.knowledge.set(normalized_key, value)
+        try:
+            before = self.knowledge.get(normalized_key)
+            self.knowledge.set(normalized_key, value)
+        except (OSError, sqlite3.Error):
+            raise PersistenceOperationError() from None
         return before != value
 
     def retire_fact(self, key, *, confirmed=False, reason=None):
@@ -123,12 +134,19 @@ class KnowledgeService:
         retire = getattr(self.knowledge, "retire", None)
         if not callable(retire):
             raise RuntimeError("Fact retirement is unavailable.")
-        return retire(key, reason)
+        try:
+            return retire(key, reason)
+        except (OSError, sqlite3.Error):
+            raise PersistenceOperationError() from None
 
     def history(self, key):
         history = getattr(self.knowledge, "history", None)
         if not callable(history):
             return ()
+        try:
+            rows = history(key)
+        except (OSError, sqlite3.Error):
+            raise PersistenceOperationError() from None
         return tuple(
             FactRevision(
                 key=row["fact_key"],
@@ -139,7 +157,7 @@ class KnowledgeService:
                 updated_at=row["updated_at"],
                 is_current=bool(row["is_current"]),
             )
-            for row in history(key)
+            for row in rows
         )
 
     def answer(self, text):

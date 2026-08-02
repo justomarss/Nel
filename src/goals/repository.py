@@ -1,3 +1,5 @@
+import sqlite3
+
 from src.goals.models import (
     GoalOwner,
     GoalPriority,
@@ -83,31 +85,44 @@ class GoalRepository:
         self.database = database
 
     def get(self, goal_id: str) -> GoalSnapshot | None:
-        connection = self.database.connect()
+        connection = None
         try:
+            connection = self.database.connect()
             row = connection.execute(
                 f"SELECT {CURRENT_COLUMNS} FROM goals_current "
                 "WHERE goal_id = ?",
                 (goal_id,),
             ).fetchone()
             return None if row is None else _snapshot(row)
+        except (OSError, sqlite3.Error) as exc:
+            raise GoalRepositoryError(
+                f"Goal read failed ({type(exc).__name__})."
+            ) from None
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
 
     def list_current(self) -> tuple[GoalSnapshot, ...]:
-        connection = self.database.connect()
+        connection = None
         try:
+            connection = self.database.connect()
             rows = connection.execute(
                 f"SELECT {CURRENT_COLUMNS} FROM goals_current "
                 "ORDER BY updated_at DESC, goal_id"
             ).fetchall()
             return tuple(_snapshot(row) for row in rows)
+        except (OSError, sqlite3.Error) as exc:
+            raise GoalRepositoryError(
+                f"Goal list failed ({type(exc).__name__})."
+            ) from None
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
 
     def history(self, goal_id: str) -> tuple[GoalRevision, ...]:
-        connection = self.database.connect()
+        connection = None
         try:
+            connection = self.database.connect()
             rows = connection.execute(
                 f"SELECT {CURRENT_COLUMNS}, superseded_at "
                 "FROM goals_history WHERE goal_id = ? ORDER BY version",
@@ -121,8 +136,13 @@ class GoalRepository:
                 )
                 for row in rows
             )
+        except (OSError, sqlite3.Error) as exc:
+            raise GoalRepositoryError(
+                f"Goal history read failed ({type(exc).__name__})."
+            ) from None
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
 
     def _create(self, snapshot: GoalSnapshot) -> GoalSnapshot:
         if not isinstance(snapshot, GoalSnapshot):
@@ -140,7 +160,7 @@ class GoalRepository:
                 )
         except GoalRepositoryError:
             raise
-        except Exception as exc:
+        except (OSError, sqlite3.Error) as exc:
             raise GoalRepositoryError(
                 f"Goal creation failed ({type(exc).__name__})."
             ) from None
@@ -226,7 +246,7 @@ class GoalRepository:
                 )
         except GoalRepositoryError:
             raise
-        except Exception as exc:
+        except (OSError, sqlite3.Error) as exc:
             raise GoalRepositoryError(
                 f"Goal update failed ({type(exc).__name__})."
             ) from None

@@ -27,6 +27,8 @@ root main.py (development CLI)
         -> bounded immutable DecisionContext
         -> pure deterministic DecisionEngine
            -> goal_command -> GoalCommandHandler -> GoalService
+           -> fact_command -> FactCommandHandler -> KnowledgeService
+           -> memory_command -> MemoryCommandHandler -> MemoryService
            -> ask_clarification -> deterministic response
            -> conversation_response -> existing conversation flow
               -> IntentClassifier
@@ -53,11 +55,10 @@ boundary. It receives only bounded operational event data and explicit goal
 command syntax. It selects exactly one route before any provider call and has
 no repository access or write authority.
 
-The v1 routes are `conversation_response`, `ask_clarification`,
-`goal_command`, `thought_start`, and `no_action`. Memory, Knowledge, and
-Identity candidate routing is deliberately absent; their existing behavior
-continues inside the selected conversation route. Natural-language goal text
-is conversation, never a goal command.
+The active routes are `conversation_response`, `ask_clarification`,
+`goal_command`, `fact_command`, `memory_command`, `thought_start`, and
+`no_action`. Memory, Knowledge, and Identity candidate routing is deliberately
+absent. Natural-language goal text is conversation, never a write command.
 
 ## Concept Boundaries
 
@@ -125,6 +126,10 @@ Providers must expose stable capabilities for:
 - clear errors that do not expose credentials.
 
 The current NVIDIA NIM implementation uses an OpenAI-compatible client.
+Environment values are inert during import. Guarded runtime construction loads
+and validates required credentials, model, HTTPS/HTTP base URL, bounded
+timeout, database path, and boolean flags. Configuration failures cross one
+redacted application boundary before Nel or its clock is constructed.
 
 [Provisional] Define a Python protocol or abstract interface only when a
 second provider or provider-level test double makes the contract necessary.
@@ -158,15 +163,10 @@ confirmed `/fact set` and `/fact retire` commands may write through
 
 ## Nel-Owned Identity and State
 
-Nel-owned identity and preferences require storage separate from user
-knowledge. A Nel preference may be formed only through an approved formation
-process using actual observations or interactions. Generated claims alone are
-not evidence.
-
-[Provisional] Model Nel-owned records with explicit fields for value,
-confidence, evidence references, creation time, update time, and status
-(`provisional`, `established`, or `retired`). The exact schema requires
-an ADR before implementation.
+Nel-owned identity and preferences use versioned current/history tables
+separate from user knowledge. Immutable core identity is protected by two
+canonical SQLite triggers. Preference writes are available only through
+`IdentityService`; automatic preference formation is not implemented.
 
 ## Persistence
 
@@ -175,10 +175,12 @@ concurrency control, migrations, relational integrity, or recoverable value
 history.
 
 ADR-013 accepts SQLite as Nel's authoritative local persistence foundation.
-The approved schema is limited to `schema_version`, `memory_events`,
-`user_facts_current`, and `user_fact_history`. Current facts are stored
-directly; superseded values remain recoverable in history. Additional domain
-tables and retrieval extensions require separate approval.
+Schema v4 has exactly eight STRICT tables: `schema_version`, `memory_events`,
+`user_facts_current`, `user_fact_history`, `nel_identity_current`,
+`nel_identity_history`, `goals_current`, and `goals_history`. It also requires
+the two identity immutability triggers and
+`goals_current_state_updated_idx`. Current records are stored directly;
+superseded fact, identity, and goal versions remain recoverable in history.
 
 A vector database must not be added until semantic retrieval is necessary,
 measured, and shown to outperform simpler indexed retrieval.
@@ -230,6 +232,19 @@ work.
 [Provisional] Use standard Python logging with redaction, typed application
 errors, bounded retry policies, and atomic persistence operations before
 introducing external observability infrastructure.
+
+Expected SQLite failures are converted at service or command boundaries into
+redacted `ApplicationError` values or deterministic local responses. Optional
+ContextAssembler sources omit their complete section on read or snapshot-shape
+failure; malformed facts activate the no-personal-fact assertion rule. Core
+identity failure remains fatal to conversational generation. Programming
+errors are not treated as operational persistence failures.
+
+Backup creation uses `sqlite3.Connection.backup()`. Verification restores into
+an isolated path, applies the same version-specific structural validator used
+by runtime startup, then checks integrity, Unicode, ordering, current/history
+continuity, and source equality during creation. The historical schema-v1
+cutover CLI is retired and is not an active operational tool.
 
 ## Security Boundaries
 

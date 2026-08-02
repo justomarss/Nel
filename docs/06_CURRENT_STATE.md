@@ -15,17 +15,18 @@ The provisional inference model is `meta/llama-3.1-70b-instruct`. Automatic
 LLM-generated background thoughts are disabled by default while foreground
 conversation and structured extraction remain active.
 
-The core direction is clearer than the implementation maturity. Nel does not
-yet meet the first-stable criteria.
+The v1.0 release-integrity hardening is implemented. A fresh release backup
+and final end-to-end acceptance audit remain required before tagging v1.0.
 
 ## Supported Development Path
 
 - Entry point: root `main.py`
 - Composition root: `src/core/nel.py`
-- Environment: `.env` may supply NVIDIA credentials, model, and endpoint
-  configuration. Importing runtime modules does not require those values;
-  provider construction validates them when NVIDIA NIM is actually selected.
-- Dependencies: `openai`, `pydantic`, `python-dotenv`, `rich`
+- Environment: `.env` may supply NVIDIA credentials, model, endpoint, timeout,
+  and the background-thought flag. Importing modules is side-effect-safe;
+  guarded runtime construction validates configuration and redacts failures.
+- Dependencies: exact tested versions of `openai`, Pydantic v2, and
+  `python-dotenv` are pinned; inactive `rich` was removed
 - Interface: interactive CLI only
 
 ## Implemented
@@ -55,8 +56,8 @@ yet meet the first-stable criteria.
   identity immutability triggers, and fact-retirement columns. It never
   migrates or creates a production database at startup. Production is schema
   version 4 after the controlled migration.
-- Identity v1 storage and runtime composition are implemented. The controlled
-  production migration to schema version 2 is complete.
+- Identity v1 storage and runtime composition are implemented within the
+  active schema-v4 production database.
 - Runtime Memory, Knowledge, Identity, and Goal services share one guarded
   database. Identity and goals remain namespace-separated and enter
   conversation prompts only through bounded read-only snapshots.
@@ -84,6 +85,9 @@ yet meet the first-stable criteria.
 - The CLI always stops Nel in a `finally` block.
 - Foreground provider failures become redacted application errors instead of
   terminating the CLI.
+- Expected SQLite failures in local goal, fact, memory, identity, and context
+  routes are converted to redacted application errors or deterministic local
+  responses; raw database exceptions do not reach the CLI.
 - Thought System v1 uses a single in-memory coordinator, bounded read-only
   context, typed temporary observations, and deny-by-default Memory,
   Knowledge, and Identity policies.
@@ -103,6 +107,10 @@ yet meet the first-stable criteria.
 - Windows stdout and stderr are configured for UTF-8 when supported.
 - Private SQLite data, cutover artifacts, historical JSON, and `.env` are
   ignored by Git.
+- Backup verification restores to an isolated copy, applies the same complete
+  structural validator used by runtime startup, then verifies continuity,
+  Unicode, integrity, and source equality during backup creation.
+- The schema-v1 JSON cutover CLI is retired and always refuses execution.
 
 ## Partially Implemented
 
@@ -117,7 +125,7 @@ yet meet the first-stable criteria.
 | Decision Engine | Deterministic routing covers conversation, explicit goal, fact, and memory commands, clarification, background thought starts, and no-action; natural-language write routing and knowledge or identity candidates are deferred |
 | Clock | Lifecycle is owned, but an active provider callback cannot be cancelled early |
 | Provider independence | Brain is injected, but composition hardcodes NVIDIA NIM |
-| Error handling | Provider and background failures are bounded; startup persistence and provider-configuration failures are redacted, while operational write failures need broader application handling |
+| Error handling | Startup, provider, expected SQLite, context-source, and background failures have redacted boundaries; unexpected programming errors remain visible during development |
 | Retrieval | Unified deterministic lexical selection is active; synonyms, paraphrases, morphology, embeddings, and semantic retrieval are absent |
 | Silence/autonomy | Reflection exists; controlled silence and topic initiation do not |
 
@@ -134,7 +142,7 @@ yet meet the first-stable criteria.
 
 ## Tests
 
-The repository has 277 assertion-based `unittest` cases covering:
+The repository has 295 assertion-based `unittest` cases covering:
 
 - temporary new, correction, reactivation, and same-value fact proposals with
   no provider-authoritative durable writes;
@@ -178,6 +186,15 @@ The repository has 277 assertion-based `unittest` cases covering:
 - canonical context determinism, SHA-256 digests, separate system/user limits,
   complete-record budgeting, relevance and stable ordering, source failures,
   duplicate memory defense, and absence of provider/repository/write authority.
+- malformed fact, goal, memory, preference, and core-identity snapshot
+  boundaries;
+- complete schema-v4 backup structure, including both identity triggers and
+  the goal index;
+- redacted SQLite failures for every local goal, fact, memory, and identity
+  route, while programmer errors remain visible;
+- deferred configuration parsing, malformed-value rejection, traceback-free
+  CLI startup failure, and credential-free module imports;
+- exact dependency and post-install environment verification.
 
 `tests/test_event.py` is a print-based EventBus smoke script, not an
 assertion-based test.
@@ -205,8 +222,8 @@ so provider integration is not yet operationally reliable.
    deterministic automated coverage.
 8. The 12,000-character limit is provider-independent but does not guarantee a
    provider token count or latency bound.
-9. The retained cutover CLI targets schema v1 and is not the operational
-   verifier for the active schema-v4 database.
+9. Memory duplicate rejection is lookup-based until persisted fingerprints
+   receive a separate schema decision; concurrent explicit writers can race.
 
 ## Legacy, Duplicate, and Placeholder Code
 
@@ -237,11 +254,11 @@ documents remain present but are non-normative until reconciled.
 
 - The target is provider-independent; construction currently hardcodes NIM.
 
-## Remaining v1.0 Blockers
+## Remaining v1.0 Release Gates
 
-- Replace or retire schema-v1-only operational cutover verification tooling.
-- Create a fresh validated release backup and complete sustained runtime,
-  controlled initiation, and appropriate-silence acceptance checks.
+- Create a fresh validated schema-v4 release backup after this hardening.
+- Complete the final end-to-end acceptance audit, including a bounded live
+  provider conversation and immediate clean shutdown.
 
 ## Provisional Baseline Choices
 

@@ -364,7 +364,12 @@ def _utc_now() -> str:
 
 
 def _normalize_schema_sql(value: str) -> str:
-    return " ".join(value.split()).casefold()
+    normalized = " ".join(value.split()).casefold()
+    return normalized.replace(
+        "create table if not exists ",
+        "create table ",
+        1,
+    )
 
 
 class UnsupportedSchemaVersion(RuntimeError):
@@ -406,6 +411,12 @@ SCHEMA_STATEMENTS = (
     ) STRICT
     """,
 )
+V1_TABLE_DEFINITIONS = {
+    "schema_version": SCHEMA_STATEMENTS[0],
+    "memory_events": SCHEMA_STATEMENTS[1],
+    "user_facts_current": SCHEMA_STATEMENTS[2],
+    "user_fact_history": SCHEMA_STATEMENTS[3],
+}
 
 
 class SQLiteDatabase:
@@ -419,13 +430,14 @@ class SQLiteDatabase:
         self.timeout = timeout
         self.require_existing = require_existing
 
-    def connect(self) -> sqlite3.Connection:
+    def connect(self, *, read_only: bool = False) -> sqlite3.Connection:
         target = self.path
         uri = False
-        if self.require_existing:
+        if self.require_existing or read_only:
             if not self.path.is_file():
                 raise FileNotFoundError("SQLite database does not exist.")
-            target = f"{self.path.resolve().as_uri()}?mode=rw"
+            mode = "ro" if read_only else "rw"
+            target = f"{self.path.resolve().as_uri()}?mode={mode}"
             uri = True
 
         connection = sqlite3.connect(
@@ -490,6 +502,8 @@ class SQLiteDatabase:
     def validate_existing(
         self,
         expected_version: int = ACTIVE_SCHEMA_VERSION,
+        *,
+        read_only: bool = False,
     ) -> None:
         if not self.require_existing:
             raise RuntimeError(
@@ -521,7 +535,7 @@ class SQLiteDatabase:
                 "Unsupported SQLite schema version."
             )
 
-        connection = self.connect()
+        connection = self.connect(read_only=read_only)
         try:
             integrity = [
                 row[0]
@@ -562,6 +576,45 @@ class SQLiteDatabase:
                 )
                 if columns != columns_expected:
                     raise RuntimeError("SQLite schema is incompatible.")
+
+            table_sql = {
+                row["name"]: row["sql"]
+                for row in connection.execute(
+                    "SELECT name, sql FROM sqlite_schema WHERE type = 'table'"
+                )
+            }
+            base_tables = (
+                V1_TABLE_DEFINITIONS
+                if expected_version != FACT_SCHEMA_VERSION
+                else {
+                    name: V1_TABLE_DEFINITIONS[name]
+                    for name in ("schema_version", "memory_events")
+                }
+            )
+            for name, expected_sql in base_tables.items():
+                if _normalize_schema_sql(table_sql.get(name) or "") != (
+                    _normalize_schema_sql(expected_sql)
+                ):
+                    raise RuntimeError("SQLite schema is incompatible.")
+
+            if expected_version in {
+                IDENTITY_SCHEMA_VERSION,
+                GOAL_SCHEMA_VERSION,
+                FACT_SCHEMA_VERSION,
+            }:
+                from src.persistence.identity_migration import (
+                    IDENTITY_SCHEMA_STATEMENTS,
+                )
+
+                identity_definitions = {
+                    "nel_identity_current": IDENTITY_SCHEMA_STATEMENTS[0],
+                    "nel_identity_history": IDENTITY_SCHEMA_STATEMENTS[1],
+                }
+                for name, expected_sql in identity_definitions.items():
+                    if _normalize_schema_sql(table_sql.get(name) or "") != (
+                        _normalize_schema_sql(expected_sql)
+                    ):
+                        raise RuntimeError("SQLite schema is incompatible.")
 
             triggers = {
                 row["name"]: (row["tbl_name"], row["sql"])
@@ -608,16 +661,8 @@ class SQLiteDatabase:
                 GOAL_SCHEMA_VERSION,
                 FACT_SCHEMA_VERSION,
             }:
-                goal_tables = {
-                    row["name"]: row["sql"]
-                    for row in connection.execute(
-                        "SELECT name, sql FROM sqlite_schema "
-                        "WHERE type = 'table' AND name IN "
-                        "('goals_current', 'goals_history')"
-                    )
-                }
                 for name, expected_sql in GOAL_TABLE_DEFINITIONS.items():
-                    sql = goal_tables.get(name)
+                    sql = table_sql.get(name)
                     if (
                         sql is None
                         or _normalize_schema_sql(sql)

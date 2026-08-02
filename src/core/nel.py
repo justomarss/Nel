@@ -5,17 +5,14 @@ from time import monotonic
 from uuid import uuid4
 
 from src.brain.brain import Brain
-from src.brain.providers import NvidiaNimProvider
-from src.core.config import (
-    ENABLE_BACKGROUND_THOUGHTS,
-    NVIDIA_API_KEY,
-    NVIDIA_BASE_URL,
-    NVIDIA_INTERACTIVE_TIMEOUT_SECONDS,
-    NVIDIA_MODEL,
-)
 from src.context import ContextAssembler, ContextBudget
 from src.context.assembler import render_identity_value
-from src.errors import ApplicationError, ContextAssemblyError, ProviderError
+from src.errors import (
+    ApplicationError,
+    ContextAssemblyError,
+    PersistenceOperationError,
+    ProviderError,
+)
 
 from src.core.state_manager import StateManager
 from src.core.state import State
@@ -89,7 +86,7 @@ FACT_CONTEXT_UNAVAILABLE_RULE = (
 class Nel:
     def __init__(
         self,
-        enable_background_thoughts=ENABLE_BACKGROUND_THOUGHTS,
+        enable_background_thoughts=False,
         provider=None,
         memory_service=None,
         memory_repository=None,
@@ -111,12 +108,7 @@ class Nel:
             )
 
         if provider is None:
-            provider = NvidiaNimProvider(
-                model=NVIDIA_MODEL,
-                api_key=NVIDIA_API_KEY,
-                base_url=NVIDIA_BASE_URL,
-                timeout=NVIDIA_INTERACTIVE_TIMEOUT_SECONDS,
-            )
+            raise ProviderError("A provider must be injected into Nel.")
 
         self.brain = Brain(provider)
         self.memory = memory_service
@@ -284,7 +276,7 @@ class Nel:
     def _local_identity_response(self) -> str:
         try:
             snapshot = self.identity.snapshot()
-        except Exception:
+        except PersistenceOperationError:
             logger.error("Local identity read failed.")
             return "Nel kimliyi hazırda əlçatan deyil."
         fields = (
@@ -300,7 +292,7 @@ class Nel:
     def _local_user_fact_response(self) -> str:
         try:
             facts = self.knowledge.facts()
-        except Exception:
+        except PersistenceOperationError:
             logger.error("Local user-fact read failed.")
             return "İstifadəçi faktları hazırda əlçatan deyil."
         if not facts:

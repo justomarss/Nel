@@ -102,8 +102,10 @@ class RuntimeCompositionTests(unittest.TestCase):
     def test_default_runtime_uses_schema_v4_sqlite_only(self, _clock_start):
         with tempfile.TemporaryDirectory() as directory:
             path, _database = self._database(directory)
-            with patch("src.core.runtime.NEL_DATABASE_PATH", path):
-                nel = create_runtime_nel(provider=FakeProvider())
+            nel = create_runtime_nel(
+                provider=FakeProvider(),
+                environment={"NEL_DATABASE_PATH": str(path)},
+            )
             try:
                 memory = nel.memory
                 memory_repository = memory.repository

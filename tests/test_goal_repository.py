@@ -1,4 +1,5 @@
 import hashlib
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -208,7 +209,7 @@ class GoalRepositoryTests(unittest.TestCase):
             with patch.object(
                 repository,
                 "_write_current",
-                side_effect=RuntimeError("synthetic private failure"),
+                side_effect=sqlite3.OperationalError("synthetic private failure"),
             ):
                 with self.assertRaises(GoalRepositoryError):
                     service.update(

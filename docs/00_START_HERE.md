@@ -57,7 +57,7 @@ The current Windows development flow is:
 .\.venv\Scripts\python.exe main.py
 ```
 
-Startup requires an existing, validated schema-version-1 SQLite database at
+Startup requires an existing, validated schema-version-4 SQLite database at
 `memory/nel.sqlite3`. Runtime startup never creates an empty production
 database. `NEL_DATABASE_PATH` may override the path for isolated development
 or tests, but there is no JSON runtime backend selector.
@@ -74,8 +74,16 @@ Optional runtime configuration:
 
 - `NEL_DATABASE_PATH`: existing SQLite database path; defaults to
   `memory/nel.sqlite3`.
-- `RAW_MEMORY_CONTEXT_LIMIT`: non-negative maximum number of newest raw
-  memories included in a prompt; defaults to `20`.
+- `NVIDIA_TIMEOUT_SECONDS`: provider timeout greater than zero and no more
+  than 300 seconds; defaults to `45`.
+- `ENABLE_BACKGROUND_THOUGHTS`: strict boolean; defaults to `false`.
+
+Configuration is parsed only during guarded runtime construction. Importing
+Nel modules does not require credentials or validate environment values.
+
+The current backup and isolated verification procedure is documented in the
+root [Readme](../Readme.md). `scripts/sqlite_cutover.py` is retired historical
+schema-v1 tooling and must not be used with the active database.
 
 Run the focused automated tests with:
 

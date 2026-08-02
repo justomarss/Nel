@@ -21,6 +21,7 @@ from src.persistence.sqlite import (
     GOAL_TABLE_DEFINITIONS,
     GOAL_TABLES,
     SCHEMA_VERSION,
+    SQLiteDatabase,
     _normalize_schema_sql,
 )
 
@@ -500,9 +501,16 @@ def _verify_backup(
                 restored_snapshot = _read_and_validate(connection)
             finally:
                 connection.close()
+            SQLiteDatabase(
+                restored_path,
+                require_existing=True,
+            ).validate_existing(
+                expected_version=restored_snapshot.schema_versions[0],
+                read_only=True,
+            )
     except BackupValidationError:
         raise
-    except (OSError, sqlite3.DatabaseError) as exc:
+    except (OSError, RuntimeError, sqlite3.DatabaseError) as exc:
         raise BackupValidationError(
             f"Backup restore verification failed ({type(exc).__name__})."
         ) from None

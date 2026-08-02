@@ -545,44 +545,15 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None, output=sys.stdout) -> int:
-    arguments = _parser().parse_args(argv)
-    try:
-        if arguments.command == "rehearse":
-            report = rehearse(
-                arguments.long_term_json,
-                arguments.knowledge_json,
-            )
-        elif arguments.command == "verify":
-            report = verify_existing(arguments.database, arguments.backup)
-        else:
-            report = cutover(
-                arguments.long_term_json,
-                arguments.knowledge_json,
-                arguments.database,
-                arguments.backup_root,
-                arguments.manifest,
-            )
-    except CutoverError as exc:
-        print_report(
-            OperationReport(
-                status="FAIL",
-                statuses={"operation": exc.status},
-            ),
-            output,
-        )
-        return 1
-    except Exception:
-        print_report(
-            OperationReport(
-                status="FAIL",
-                statuses={"operation": "unexpected_failure"},
-            ),
-            output,
-        )
-        return 1
-
-    print_report(report, output)
-    return 0
+    del argv
+    print_report(
+        OperationReport(
+            status="FAIL",
+            statuses={"operation": "historical_schema_v1_tool_retired"},
+        ),
+        output,
+    )
+    return 1
 
 
 if __name__ == "__main__":

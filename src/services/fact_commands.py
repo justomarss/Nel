@@ -7,6 +7,7 @@ from src.core.decision_engine import (
     ExplicitCommandParse,
     GoalCommandParseStatus,
 )
+from src.errors import PersistenceOperationError
 
 
 class FactCommandError(ValueError):
@@ -42,7 +43,9 @@ class FactCommandHandler:
             return self.execute_payload(self._arguments(text))
         except KeyError:
             return "Fakt tapılmadı."
-        except (FactCommandError, ValueError, RuntimeError) as exc:
+        except PersistenceOperationError:
+            return "Fakt xidməti hazırda əlçatan deyil."
+        except (FactCommandError, ValueError) as exc:
             return f"Fakt əmri rədd edildi: {exc}"
 
     def inspect(self, text: str) -> ExplicitCommandParse:
@@ -87,7 +90,9 @@ class FactCommandHandler:
             return self._retire(command)
         except KeyError:
             return "Fakt tapılmadı."
-        except (FactCommandError, ValueError, RuntimeError) as exc:
+        except PersistenceOperationError:
+            return "Fakt xidməti hazırda əlçatan deyil."
+        except (FactCommandError, ValueError) as exc:
             return f"Fakt əmri rədd edildi: {exc}"
 
     @classmethod

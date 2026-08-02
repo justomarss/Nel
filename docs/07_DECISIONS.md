@@ -33,6 +33,55 @@ cannot define identity; public-product concerns are deferred.
 
 Status: Accepted.
 
+## ADR-021: Natural Language Intent Layer v1
+
+Context: Common Azerbaijani read-only questions should use deterministic local
+services without requiring slash commands or granting natural language any
+durable write authority.
+
+Options: require slash commands for every read; use a provider classifier; or
+add a small deterministic Unicode-safe classifier after Decision Engine route
+selection.
+
+Decision: Add provider-free intents for goal listing, identity queries, user
+fact queries, and ordinary conversation. Decision Engine remains authoritative.
+Supported local intents route only to existing read APIs. Natural-language
+goal statements do not create goals and instead direct the user to explicit
+`/goal create` syntax. Unsupported text remains ordinary conversation.
+
+Consequences: Common local reads avoid provider latency and cannot write.
+Coverage is intentionally phrase-bounded and may produce false negatives;
+provider-assisted intent classification and natural-language writes remain
+deferred.
+
+Status: Accepted.
+
+## ADR-023: Knowledge Grounding v1
+
+Context: Schema-valid provider extraction does not prove that a proposed user
+fact is semantically supported by the user's message.
+
+Options: retain provider-authoritative writes; use confidence thresholds; or
+treat extraction as temporary candidates requiring exact deterministic
+grounding and explicit user confirmation for durability.
+
+Decision: Provider extraction may propose a normalized key, exact literal
+value, user subject, confidence, and exact source/value offsets. A pure
+`FactGroundingPolicy` validates original Unicode code-point spans, quotes,
+literal values, ownership, and conservative linguistic safety. Questions,
+commands, local reads, negation, historical-only evidence, ambiguous
+ownership, comparative overclaims, malformed batches, and transformed values
+fail closed. Grounded candidates are temporary new, correction, reactivation,
+or same-value proposals. They never write automatically. Durable writes remain
+limited to confirmed `/fact set` and `/fact retire` through KnowledgeService.
+
+Consequences: Provider output has no durability authority and literal values
+remain unchanged. False negatives are accepted. Pending candidate storage,
+automatic correction, semantic inference, relation graphs, and confidence-
+based writes remain deferred.
+
+Status: Accepted.
+
 ## ADR-024: Unified Context Assembly v1
 
 Context: Nel currently assembles identity, goals, active user facts, and

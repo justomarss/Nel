@@ -14,10 +14,14 @@ from src.context.models import (
     PreferenceContextRecord,
     TruncationMetadata,
     UserFactContextRecord,
+    FactContextSnapshot,
+    MemoryContextSnapshot,
 )
 from src.context.relevance import is_relevant, relevance_tuple
-from src.errors import ContextAssemblyError
-from src.goals.models import GoalPriority, GoalState
+from src.errors import ContextAssemblyError, PersistenceOperationError
+from src.goals.models import GoalPriority, GoalSnapshot, GoalState
+from src.goals.repository import GoalRepositoryError
+from src.identity.models import IdentityRecord, IdentitySnapshot
 from src.memory.normalization import memory_fingerprint
 
 
@@ -35,6 +39,20 @@ _GOAL_PRIORITY_ORDER = {
     GoalPriority.LOW: 2,
 }
 _TRUNCATION_REASONS = {"budget_exceeded", "record_oversized", "source_limit"}
+
+
+class _OptionalSnapshotError(ValueError):
+    pass
+
+
+_OPTIONAL_SOURCE_ERRORS = (
+    AttributeError,
+    KeyError,
+    TypeError,
+    ValueError,
+    PersistenceOperationError,
+    GoalRepositoryError,
+)
 
 
 def canonical_json(payload) -> str:
@@ -165,13 +183,17 @@ class ContextAssembler:
             else:
                 reader = getattr(self.identity_service, "snapshot", None)
                 snapshot = reader()
-            required = ("identity_id", "display_name", "nature", "role", "preferences")
-            if reader is None or any(not hasattr(snapshot, field) for field in required):
+            if reader is None or not isinstance(snapshot, IdentitySnapshot):
                 raise ValueError
             return snapshot
         except ContextAssemblyError:
             raise
-        except Exception:
+        except (
+            AttributeError,
+            TypeError,
+            ValueError,
+            PersistenceOperationError,
+        ):
             raise ContextAssemblyError("identity_context_unavailable") from None
 
     @staticmethod
@@ -195,13 +217,17 @@ class ContextAssembler:
         groups = {"established": [], "provisional": []}
         try:
             records = tuple(snapshot.preferences)
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
             omitted["identity_preferences"] += 1
             reasons.add("identity_preferences_omitted")
             return (), ()
         for record in records:
             state = getattr(record, "preference_state", None)
             if state not in groups:
+                continue
+            if not isinstance(record, IdentityRecord):
+                omitted["identity_preferences"] += 1
+                reasons.add("identity_preferences_omitted")
                 continue
             key = getattr(record, "key", None)
             value = getattr(record, "value", None)
@@ -236,22 +262,25 @@ class ContextAssembler:
                 snapshots = reader(limit=SOURCE_SNAPSHOT_LIMIT)
             else:
                 snapshots = tuple(
-                    type("Fact", (), {"key": key, "value": value})()
+                    FactContextSnapshot(key, value)
                     for key, value in self.knowledge_service.facts().items()
                 )
-        except Exception:
+            snapshots = tuple(snapshots)
+            if any(not isinstance(fact, FactContextSnapshot) for fact in snapshots):
+                raise TypeError
+        except _OPTIONAL_SOURCE_ERRORS:
             omitted["facts"] += 1
             reasons.add("fact_context_omitted")
             return ()
 
         candidates = []
         for fact in snapshots:
-            key = getattr(fact, "key", None)
-            value = getattr(fact, "value", None)
-            if not isinstance(key, str) or not isinstance(value, str):
-                omitted["facts"] += 1
-                reasons.add("invalid_snapshot_record")
-                continue
+            key = fact.key
+            value = fact.value
+            if not isinstance(key, str) or not key or not isinstance(value, str):
+                omitted["facts"] += len(snapshots)
+                reasons.add("fact_context_omitted")
+                return ()
             readable = key.replace("_", " ")
             score = relevance_tuple(message, value, readable)
             if not is_relevant(score) and not broad:
@@ -272,10 +301,13 @@ class ContextAssembler:
             if callable(reader):
                 snapshots = reader(limit=SOURCE_SNAPSHOT_LIMIT)
             elif self.goal_service is None:
-                raise RuntimeError
+                raise _OptionalSnapshotError
             else:
                 snapshots = self.goal_service.list_current()
-        except Exception:
+            snapshots = tuple(snapshots)
+            if any(not isinstance(goal, GoalSnapshot) for goal in snapshots):
+                raise TypeError
+        except _OPTIONAL_SOURCE_ERRORS:
             omitted["goals"] += 1
             reasons.add("goal_context_omitted")
             return (), ()
@@ -328,21 +360,31 @@ class ContextAssembler:
                 snapshots = reader(limit=SOURCE_SNAPSHOT_LIMIT)
             else:
                 snapshots = tuple(
-                    type("Memory", (), {"event_id": index, "stored_at": None, "text": text})()
+                    MemoryContextSnapshot(index, None, text)
                     for index, text in enumerate(self.memory_service.recall(), start=1)
                 )
-        except Exception:
+            snapshots = tuple(snapshots)
+            if any(
+                not isinstance(memory, MemoryContextSnapshot)
+                or isinstance(memory.event_id, bool)
+                or not isinstance(memory.event_id, int)
+                or memory.event_id < 1
+                or (
+                    memory.stored_at is not None
+                    and not isinstance(memory.stored_at, str)
+                )
+                or not isinstance(memory.text, str)
+                for memory in snapshots
+            ):
+                raise TypeError
+        except _OPTIONAL_SOURCE_ERRORS:
             omitted["memories"] += 1
             reasons.add("memory_context_omitted")
             return ()
 
         unique = {}
         for memory in sorted(snapshots, key=lambda item: item.event_id):
-            text = getattr(memory, "text", None)
-            if not isinstance(text, str):
-                omitted["memories"] += 1
-                reasons.add("invalid_snapshot_record")
-                continue
+            text = memory.text
             if len(text) > self.budget.individual_memory_character_limit:
                 omitted["memories"] += 1
                 reasons.add("record_oversized")
