@@ -40,7 +40,8 @@ class ScriptedProvider:
 
     def generate(self, prompt):
         self.prompts.append(prompt)
-        return self.responses.get(provider_user_message(prompt), self.default)
+        response = self.responses.get(provider_user_message(prompt), self.default)
+        return response.pop(0) if isinstance(response, list) else response
 
     def generate_structured(self, prompt, schema, schema_name):
         self.structured_prompts.append((prompt, schema, schema_name))
@@ -402,7 +403,7 @@ class SimulatedProviderRiskTests(ConversationRegressionTestCase):
         self.assertEqual(facts, {})
         self.assertEqual(memories, [])
 
-    def test_simulated_provider_risk_e_identity_repetition_passes_through(self):
+    def test_response_plan_e_known_identity_repetition_is_controlled(self):
         questions = (
             "2+2 neçədir?",
             "Kod yaza bilirsən?",
@@ -420,7 +421,68 @@ class SimulatedProviderRiskTests(ConversationRegressionTestCase):
             finally:
                 nel.stop()
 
-        self.assertTrue(all(answer.startswith(prefix) for answer in answers))
+        self.assertTrue(all(not answer.startswith(prefix) for answer in answers))
+        self.assertTrue(all("Nel" not in answer for answer in answers))
+
+    def test_response_plan_creative_request_needs_no_preference(self):
+        question = "Mahnı yaz."
+        with tempfile.TemporaryDirectory() as directory:
+            provider = ScriptedProvider({question: "Səssiz gecə, yanan ulduz."})
+            nel = self.runtime(directory, provider)
+            try:
+                answer = nel.think(question)
+            finally:
+                nel.stop()
+
+        self.assertEqual(answer, "Səssiz gecə, yanan ulduz.")
+        self.assertIn("purpose=creative", provider.prompts[0])
+        self.assertIn("Stored preferences are not required.", provider.prompts[0])
+
+    def test_response_plan_continuation_uses_immediate_conversation(self):
+        first = "Bir mahnı yaz."
+        followup = "Kədərli olsun."
+        with tempfile.TemporaryDirectory() as directory:
+            provider = ScriptedProvider({first: "İşıqlı mahnı.", followup: "Kədərli bənd."})
+            nel = self.runtime(directory, provider)
+            try:
+                nel.think(first)
+                answer = nel.think(followup)
+            finally:
+                nel.stop()
+
+        self.assertEqual(answer, "Kədərli bənd.")
+        self.assertIn("purpose=continuation", provider.prompts[-1])
+        self.assertIn(first, provider.prompts[-1])
+
+    def test_response_plan_retries_known_identity_preamble_once(self):
+        question = "Kod yaza bilirsən?"
+        bad = "Mən Neləm, artificial köməkçiyəm. Bəli."
+        good = "Bəli, kod yaza və izah edə bilirəm."
+        with tempfile.TemporaryDirectory() as directory:
+            provider = ScriptedProvider({question: [bad, good]})
+            nel = self.runtime(directory, provider)
+            try:
+                answer = nel.think(question)
+            finally:
+                nel.stop()
+
+        self.assertEqual(answer, good)
+        self.assertEqual(len(provider.prompts), 2)
+        self.assertIn("Corrective rule", provider.prompts[-1])
+
+    def test_response_plan_repeated_identity_preamble_uses_fallback(self):
+        question = "Gemini nədir?"
+        bad = "Salam, mən Neləm, artificial köməkçiyəm."
+        with tempfile.TemporaryDirectory() as directory:
+            provider = ScriptedProvider({question: [bad, bad]})
+            nel = self.runtime(directory, provider)
+            try:
+                answer = nel.think(question)
+            finally:
+                nel.stop()
+
+        self.assertNotIn("Nel", answer)
+        self.assertEqual(len(provider.prompts), 2)
 
 
 class CommandContinuityTests(ConversationRegressionTestCase):
@@ -489,6 +551,23 @@ class CommandContinuityTests(ConversationRegressionTestCase):
 
         self.assertEqual(execute.call_count, 1)
         self.assertEqual(facts, {"favorite_anime": "HxH"})
+
+    def test_historical_command_is_not_a_response_plan_continuation(self):
+        command = '/fact set favorite_anime --value "HxH" --confirm'
+        followup = "Davam et."
+        with tempfile.TemporaryDirectory() as directory:
+            provider = ScriptedProvider({followup: "Nəyi davam etdirməli olduğumu dəqiqləşdir."})
+            nel = self.runtime(directory, provider)
+            try:
+                nel.think(command)
+                answer = nel.think(followup)
+                facts = nel.knowledge.facts()
+            finally:
+                nel.stop()
+
+        self.assertEqual(answer, "Nəyi davam etdirməli olduğumu dəqiqləşdir.")
+        self.assertEqual(facts, {"favorite_anime": "HxH"})
+        self.assertIn("purpose=general", provider.prompts[-1])
 
     def test_stale_command_text_cannot_override_current_structured_state(self):
         old_command = '/fact set favorite_anime --value "HxH" --confirm'
@@ -994,19 +1073,15 @@ class FutureConversationContractTests(ConversationRegressionTestCase):
         self.assertEqual(context["memories"], [])
         self.assertNotEqual(answer, denial)
 
-    @unittest.expectedFailure
     def test_future_contract_e_arithmetic_does_not_repeat_identity(self):
         self._assert_ordinary_answer_has_no_identity("2+2 neçədir?")
 
-    @unittest.expectedFailure
     def test_future_contract_e_code_task_does_not_repeat_identity(self):
         self._assert_ordinary_answer_has_no_identity("Kod yaza bilirsən?")
 
-    @unittest.expectedFailure
     def test_future_contract_e_song_task_does_not_repeat_identity(self):
         self._assert_ordinary_answer_has_no_identity("Bir mahnı sözləri yaz.")
 
-    @unittest.expectedFailure
     def test_future_contract_e_gemini_question_does_not_repeat_identity(self):
         self._assert_ordinary_answer_has_no_identity("Gemini nədir?")
 

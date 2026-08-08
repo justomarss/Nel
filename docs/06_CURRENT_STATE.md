@@ -129,6 +129,12 @@ publication remain explicit operator actions.
   personal-state questions; public/general questions still use the provider.
   It has no write authority and does not provide universal provider-prose
   claim validation or an Expression Engine.
+- Response Plan and Expression v1 gives provider-bound responses a bounded
+  general, creative, or immediate-continuation purpose. These plans forbid
+  irrelevant identity expression and do not require stored preferences for
+  ordinary creative work. A narrow literal identity-preamble boundary check
+  permits one corrective regeneration before deterministic fallback; it is not
+  universal semantic response validation.
 - Windows stdout and stderr are configured for UTF-8 when supported.
 - Private SQLite data, cutover artifacts, historical JSON, and `.env` are
   ignored by Git.

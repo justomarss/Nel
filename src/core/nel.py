@@ -53,6 +53,13 @@ from src.response_authority import (
     ResponseMode,
     ResponseReason,
 )
+from src.response_planning import (
+    ContinuitySource,
+    ExpressionBoundaryValidator,
+    ResponsePlan,
+    ResponsePlanner,
+    ResponsePurpose,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -99,7 +106,7 @@ Rules:
 - Address the user with informal second-person forms such as "sən" and "sənin", never "siz" or "sizin".
 - Use "mən" and "mənim" in the assistant's answer only for the assistant's identity or state.
 - Never invent the assistant's preferences, memories, experiences, emotions, relationships, or personal history.
-- If no relevant stored preference exists, say the assistant has not formed one yet.
+- Only discuss the assistant's own preferences when the current request explicitly asks about them.
 """
 
 FACT_CONTEXT_UNAVAILABLE_RULE = (
@@ -120,6 +127,7 @@ MIXED_PERSONAL_GENERAL_CLARIFICATION = (
 PERSONAL_AUTHORITY_FAILURE_RESPONSE = (
     "Şəxsi məlumatla bağlı sorğunu dəqiqləşdir."
 )
+EXPRESSION_BOUNDARY_FALLBACK = "Tapşırığı identity qeyd etmədən yerinə yetirə bilmirəm."
 
 
 class Nel:
@@ -139,6 +147,8 @@ class Nel:
         local_understanding_shadow=None,
         response_authority_planner=None,
         response_authority_validator=None,
+        response_planner=None,
+        expression_boundary_validator=None,
     ):
         if memory_service is not None and memory_repository is not None:
             raise ValueError(
@@ -169,6 +179,10 @@ class Nel:
         )
         self.response_authority_validator = (
             response_authority_validator or ResponseAuthorityValidator()
+        )
+        self.response_planner = response_planner or ResponsePlanner()
+        self.expression_boundary_validator = (
+            expression_boundary_validator or ExpressionBoundaryValidator()
         )
 
         self.knowledge = KnowledgeService(
@@ -338,6 +352,8 @@ class Nel:
             if authority_response is not None:
                 return authority_response
 
+            response_plan = self._response_plan(prompt)
+
             conversation_turn_started = True
             shadow = getattr(self, "local_understanding_shadow", None)
             if shadow is not None:
@@ -364,9 +380,29 @@ class Nel:
                 prompt,
                 context_result,
                 recent_context_result,
+                response_plan,
             )
 
             response = self.brain.think(final_prompt)
+            if self._expression_boundary_violates(
+                response_plan,
+                response,
+                context_result.bundle.identity,
+            ):
+                retry_prompt = self._conversation_prompt(
+                    prompt,
+                    context_result,
+                    recent_context_result,
+                    response_plan,
+                    corrective_identity_reminder=True,
+                )
+                response = self.brain.think(retry_prompt)
+                if self._expression_boundary_violates(
+                    response_plan,
+                    response,
+                    context_result.bundle.identity,
+                ):
+                    response = EXPRESSION_BOUNDARY_FALLBACK
             if not self._provider_result_allowed(authority_plan, response):
                 return PERSONAL_AUTHORITY_FAILURE_RESPONSE
             render_proposals = getattr(
@@ -464,6 +500,8 @@ class Nel:
         prompt,
         context_result,
         recent_context_result=None,
+        response_plan=None,
+        corrective_identity_reminder=False,
     ) -> str:
         reason_codes = set(
             context_result.bundle.truncation_metadata.omission_reason_codes
@@ -475,6 +513,11 @@ class Nel:
         )
         recent_context_result = (
             recent_context_result or self._recent_context_result()
+        )
+        response_plan = response_plan or ResponsePlanner().safe_failure_plan()
+        plan_section = self._response_plan_section(
+            response_plan,
+            corrective_identity_reminder,
         )
         if (
             not isinstance(recent_context_result.serialized_characters, int)
@@ -489,6 +532,7 @@ class Nel:
             + fact_rule
             + "\nUnified context JSON:\n"
             + "\nRecent conversation JSON:\n"
+            + plan_section
             + "\nUser:\n\nAssistant:\n"
         )
         budget = self.context_assembler.budget
@@ -503,9 +547,32 @@ class Nel:
             + context_result.canonical_json
             + "\n\nRecent conversation JSON:\n"
             + recent_context_result.canonical_json
+            + "\n\n"
+            + plan_section
             + "\n\nUser:\n"
             + prompt
             + "\n\nAssistant:\n"
+        )
+
+    @staticmethod
+    def _response_plan_section(plan, corrective_identity_reminder=False):
+        instruction = {
+            ResponsePurpose.CREATIVE: "Create the requested content directly. Stored preferences are not required.",
+            ResponsePurpose.CONTINUATION: "Continue or revise the immediately preceding user-visible task using the current instruction. Do not restart the conversation.",
+        }.get(plan.purpose, "Answer the current request directly.")
+        if plan.reason_code.value == "own_preference_query":
+            instruction = (
+                "Use only structured identity preferences. If no relevant stored "
+                "preference exists, say the assistant has not formed one yet."
+            )
+        retry = "\nCorrective rule: do not begin with identity framing." if corrective_identity_reminder else ""
+        return (
+            "Response plan:\n"
+            f"purpose={plan.purpose.value}\n"
+            f"identity_expression={plan.identity_policy.value}\n"
+            f"personalization={plan.personalization_policy.value}\n"
+            f"continuity={plan.continuity_source.value}\n"
+            f"instruction={instruction}{retry}"
         )
 
     def _recent_context_result(self):
@@ -549,6 +616,24 @@ class Nel:
         except Exception:
             logger.error("Response authority planning is unavailable.")
             return ResponseAuthorityPlanner().safe_failure_plan(prompt, snapshot)
+
+    def _response_plan(self, prompt):
+        planner = getattr(self, "response_planner", None) or ResponsePlanner()
+        try:
+            return planner.plan(prompt, self._recent_snapshot())
+        except Exception:
+            logger.error("Response planning is unavailable.")
+            return ResponsePlanner().safe_failure_plan()
+
+    def _expression_boundary_violates(self, plan, response, identity):
+        try:
+            validator = getattr(self, "expression_boundary_validator", None)
+            if validator is None:
+                raise ValueError("expression_boundary_validator_missing")
+            return bool(validator.violates(plan, response, identity))
+        except Exception:
+            logger.error("Expression boundary validation is unavailable.")
+            return False
 
     def _recent_snapshot(self):
         try:

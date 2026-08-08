@@ -33,6 +33,42 @@ cannot define identity; public-product concerns are deferred.
 
 Status: Accepted.
 
+## ADR-027: Response Plan and Expression v1
+
+Context: Ordinary provider requests previously shared one generic expression
+path containing mandatory identity context and a broad preference-absence rule.
+That allowed irrelevant identity preambles, preference-based creative refusals,
+and reset-like responses to short follow-ups despite ADR-025 context.
+
+Decision: Add an immutable, deterministic `ResponsePlan` after ADR-026 and
+before provider prompt construction. Provider plans are `general`, `creative`,
+or `continuation`; deterministic local routes remain local. Each provider plan
+forbids identity expression and uses no personalization by default. Clear
+creative requests receive direct-generation instructions without requiring
+stored preferences. Recognized modifiers such as `Davam et.` and `Kədərli
+olsun.` become continuations only after an immediately preceding successful
+ordinary conversation exchange. Commands and local reads never become a
+continuation source.
+
+The prompt retains separate authoritative context, recent conversation, and
+current input, with one bounded response-plan section. The global preference
+absence rule is narrowed to explicit questions about Nel's own preferences.
+A local expression boundary validator detects only known literal identity
+preambles at response start using current structured identity values. It rejects
+without rewriting, allows one corrective regeneration under the same plan, and
+then returns deterministic neutral fallback text. It has no write authority.
+
+ADR-026 remains higher priority: protected personal paths cannot be converted
+to provider expression. Local Understanding remains diagnostics-only.
+
+Consequences: Direct creative work no longer depends on preferences, known
+identity preambles are controlled, and immediate continuation instructions are
+given an explicit task-preserving purpose. Arbitrary paraphrased identity
+claims, universal creative compliance, and full semantic response validation
+remain out of scope.
+
+Status: Accepted.
+
 ## ADR-026: Response Authority and Validation v1
 
 Context: ADR-025 gives a provider bounded recent conversation, but provider

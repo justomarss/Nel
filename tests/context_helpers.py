@@ -43,5 +43,7 @@ def unified_context(prompt: str) -> dict:
 
 def recent_conversation_context(prompt: str) -> dict:
     marker = "Recent conversation JSON:\n"
-    payload = prompt.split(marker, 1)[1].split("\n\nUser:\n", 1)[0]
+    payload = prompt.split(marker, 1)[1]
+    payload = payload.split("\n\nResponse plan:\n", 1)[0]
+    payload = payload.split("\n\nUser:\n", 1)[0]
     return json.loads(payload)
