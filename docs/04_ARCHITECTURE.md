@@ -213,6 +213,37 @@ paraphrases, or Azerbaijani morphology. Measure false negatives before
 considering embeddings or semantic retrieval. Structured facts remain
 authoritative when included memories conflict.
 
+## Conversation Continuity
+
+ADR-025 adds one ephemeral `ConversationSession` per `Nel` instance. It keeps
+at most eight literal user/assistant turns, up to 6,000 canonical serialized
+characters, with a 4,096-character limit per retained turn. Eviction removes
+the oldest complete exchange first. Text and exchanges are never truncated or
+summarized.
+
+Recent exchanges are classified as ordinary conversation, local read, or
+historical command. Successful `/goal`, `/fact`, and `/remember` exchanges are
+retained only after execution and remain inert: recent JSON is never passed to
+Decision Engine, command parsers, or command handlers. Clarification, failed
+command, no-action, and background routes are excluded. Provider failures may
+retain only the accepted user turn as an incomplete conversation exchange.
+
+`ConversationContextSerializer` produces a separate bounded canonical JSON
+section. It does not modify ADR-024's authoritative `ContextBundle`, canonical
+JSON, character count, or digest:
+
+```text
+ContextAssembler ----------------------> authoritative context JSON --\
+ConversationSession -> serializer -----> recent conversation JSON ------> prompt
+current validated user input ----------> current User section ----------/
+```
+
+Current structured Identity, Facts, and Goals always outrank recent dialogue,
+local-read responses, and historical commands. Recent context can explain a
+reference but cannot confirm, execute, or authorize a write. Sessions are
+cleared on shutdown or restart and have no repository, migration, backup, or
+MemoryService path.
+
 ## Runtime and Events
 
 The current daemon-thread Clock is provisional. A stable runtime needs:

@@ -6,6 +6,7 @@ from src.core.decision_engine import (
     ExplicitCommandParse,
     GoalCommandParseStatus,
 )
+from src.core.command_result import CommandExecutionResult
 from src.goals.models import (
     GoalCandidate,
     GoalOwner,
@@ -116,23 +117,44 @@ class GoalCommandHandler:
             return "Məqsəd əmri yaddaşa yazıla bilmədi."
 
     def execute_payload(self, arguments) -> str:
+        return self.execute_payload_result(arguments).response
+
+    def execute_payload_result(self, arguments) -> CommandExecutionResult:
         if self._service is None:
-            return "Məqsəd xidməti əlçatan deyil."
+            return CommandExecutionResult(
+                "Məqsəd xidməti əlçatan deyil.",
+                completed=False,
+            )
         try:
             command = self._parser.parse_args(list(arguments))
             if self._requires_clarification(command):
-                return self.clarification_response(
-                    self.inspect(self.PREFIX + " " + shlex.join(arguments))
+                return CommandExecutionResult(
+                    self.clarification_response(
+                        self.inspect(self.PREFIX + " " + shlex.join(arguments))
+                    ),
+                    completed=False,
                 )
-            return self._dispatch(command)
+            return CommandExecutionResult(
+                self._dispatch(command),
+                completed=True,
+            )
         except GoalVersionConflict:
-            return "Məqsəd versiyası dəyişib. Siyahını yenilə və yenidən cəhd et."
+            return CommandExecutionResult(
+                "Məqsəd versiyası dəyişib. Siyahını yenilə və yenidən cəhd et.",
+                completed=False,
+            )
         except GoalNotFoundError:
-            return "Məqsəd tapılmadı."
+            return CommandExecutionResult("Məqsəd tapılmadı.", completed=False)
         except (GoalCommandError, GoalPolicyError, ValueError) as exc:
-            return f"Məqsəd əmri rədd edildi: {exc}"
+            return CommandExecutionResult(
+                f"Məqsəd əmri rədd edildi: {exc}",
+                completed=False,
+            )
         except GoalRepositoryError:
-            return "Məqsəd əmri yaddaşa yazıla bilmədi."
+            return CommandExecutionResult(
+                "Məqsəd əmri yaddaşa yazıla bilmədi.",
+                completed=False,
+            )
 
     @classmethod
     def _arguments(cls, text: str):
@@ -212,12 +234,21 @@ class GoalCommandHandler:
         return "\n".join(lines)
 
     def list_goals(self) -> str:
+        return self.list_goals_result().response
+
+    def list_goals_result(self) -> CommandExecutionResult:
         if self._service is None:
-            return "Məqsəd xidməti əlçatan deyil."
+            return CommandExecutionResult(
+                "Məqsəd xidməti əlçatan deyil.",
+                completed=False,
+            )
         try:
-            return self._list()
+            return CommandExecutionResult(self._list(), completed=True)
         except GoalRepositoryError:
-            return "Məqsəd xidməti hazırda əlçatan deyil."
+            return CommandExecutionResult(
+                "Məqsəd xidməti hazırda əlçatan deyil.",
+                completed=False,
+            )
 
     def _update_state(self, command) -> str:
         states = {

@@ -114,6 +114,15 @@ publication remain explicit operator actions.
 - Core identity is mandatory. Optional fact, goal, and memory read failures are
   represented by safe omission metadata; fact omission adds a strict
   no-personal-fact assertion rule for that turn.
+- Conversation Continuity v1 retains at most eight session-local turns in a
+  separately serialized 6,000-character recent-context section, with a 4,096-
+  character individual-turn ceiling and deterministic oldest-exchange-first
+  eviction. It stores no durable transcript and never writes MemoryService.
+- Successful provider conversation, local Identity/Fact/Goal reads, and
+  completed explicit commands may enter recent context. Historical commands
+  are labeled inert, are appended only after execution, and never enter
+  Decision Engine or command parsing. Provider failures retain at most the
+  accepted user turn as an incomplete ephemeral exchange.
 - Windows stdout and stderr are configured for UTF-8 when supported.
 - Private SQLite data, cutover artifacts, historical JSON, and `.env` are
   ignored by Git.
@@ -137,6 +146,7 @@ publication remain explicit operator actions.
 | Provider compatibility | Configuration selects NVIDIA NIM or Gemini; there is no automatic fallback or formal provider protocol |
 | Error handling | Startup, provider, expected SQLite, context-source, and background failures have redacted boundaries; unexpected programming errors remain visible during development |
 | Retrieval | Unified deterministic lexical selection is active; synonyms, paraphrases, morphology, embeddings, and semantic retrieval are absent |
+| Conversation continuity | Four approximate exchanges are available only in the active process; there is no persistence, summarization, semantic reference resolver, or cross-session recovery |
 | Silence/autonomy | Reflection exists; controlled silence and topic initiation do not |
 
 ## Not Implemented
@@ -151,7 +161,7 @@ publication remain explicit operator actions.
 
 ## Tests
 
-The repository has 314 assertion-based `unittest` cases covering:
+The repository has 376 assertion-based `unittest` cases covering:
 
 - temporary new, correction, reactivation, and same-value fact proposals with
   no provider-authoritative durable writes;
@@ -204,6 +214,10 @@ The repository has 314 assertion-based `unittest` cases covering:
 - deferred configuration parsing, malformed-value rejection, traceback-free
   CLI startup failure, and credential-free module imports;
 - exact dependency and post-install environment verification.
+- ephemeral Conversation Continuity models, deterministic Unicode JSON,
+  exact turn and character limits, atomic eviction, session isolation,
+  restart clearing, provider-failure behavior, inert command history, and
+  absence of automatic durable-memory writes.
 
 `tests/test_event.py` is a print-based EventBus smoke script, not an
 assertion-based test.

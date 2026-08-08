@@ -7,6 +7,7 @@ from src.core.decision_engine import (
     ExplicitCommandParse,
     GoalCommandParseStatus,
 )
+from src.core.command_result import CommandExecutionResult
 from src.errors import PersistenceOperationError
 
 
@@ -79,21 +80,32 @@ class FactCommandHandler:
         )
 
     def execute_payload(self, arguments) -> str:
+        return self.execute_payload_result(arguments).response
+
+    def execute_payload_result(self, arguments) -> CommandExecutionResult:
         try:
             command = self._parser.parse_args(list(arguments))
             if command.operation == "list":
-                return self._list()
-            if command.operation == "set":
-                return self._set(command)
-            if command.operation == "history":
-                return self._history(command)
-            return self._retire(command)
+                response = self._list()
+            elif command.operation == "set":
+                response = self._set(command)
+            elif command.operation == "history":
+                response = self._history(command)
+            else:
+                response = self._retire(command)
+            return CommandExecutionResult(response, completed=True)
         except KeyError:
-            return "Fakt tapılmadı."
+            return CommandExecutionResult("Fakt tapılmadı.", completed=False)
         except PersistenceOperationError:
-            return "Fakt xidməti hazırda əlçatan deyil."
+            return CommandExecutionResult(
+                "Fakt xidməti hazırda əlçatan deyil.",
+                completed=False,
+            )
         except (FactCommandError, ValueError) as exc:
-            return f"Fakt əmri rədd edildi: {exc}"
+            return CommandExecutionResult(
+                f"Fakt əmri rədd edildi: {exc}",
+                completed=False,
+            )
 
     @classmethod
     def _arguments(cls, text: str):

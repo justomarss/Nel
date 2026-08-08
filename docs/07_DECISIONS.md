@@ -382,6 +382,133 @@ requires strict prompt behavior to prevent unsupported personal claims.
 
 Status: Accepted.
 
+## ADR-025: Conversation Continuity v1
+
+Context: Provider conversation previously received authoritative Identity,
+Facts, Goals, and Memory plus only the current user input. Short follow-ups
+therefore lacked prior user and assistant turns. Durable memory is not an
+appropriate substitute: ordinary dialogue must not become persistent state,
+while explicit commands and current structured state must retain authority.
+
+Options: continue stateless turns; reuse `MemoryService`; add recent turns to
+authoritative `ContextBundle.canonical_json`; or introduce a separate bounded
+in-memory session. Stateless turns cannot resolve common references.
+`MemoryService` would create an implicit durable write path. Adding dialogue
+to `ContextBundle` would mix ephemeral evidence with stored authoritative data
+and change ADR-024's canonical digest. The accepted option is a separate
+provider-independent subsystem and prompt section.
+
+Decision: Every `Nel` instance owns one independent `ConversationSession`.
+The session stores immutable `RecentExchange` values containing immutable
+`RecentTurn` values. A turn has a session-local monotonic ID, a `user` or
+`assistant` role, and exact user-visible literal text. An exchange has a
+session-local monotonic ID, a provenance kind of `conversation`, `local_read`,
+or `command`, and a completion state of `complete` or `incomplete`. Complete
+exchanges contain one user and one assistant turn. Only provider conversation
+may retain a user-only incomplete exchange after an accepted provider,
+assembly, or empty-response failure. No reasoning, provider diagnostics,
+exceptions, hidden output, or credentials enter recent context.
+
+The exact v1 limits are:
+
+```text
+retained turn records:                 maximum 8
+serialized recent-context JSON:        maximum 6,000 characters
+individual retained turn text:         maximum 4,096 characters
+eviction unit:                          complete exchange
+eviction order:                         oldest exchange first
+```
+
+Both count and serialized-character ceilings apply. Counting uses Python
+Unicode code points. JSON overhead and provenance are included. Strings,
+Unicode code points, and exchanges are never truncated. There is no
+summarization. A complete exchange that cannot fit by itself is returned to
+the user normally but omitted from recent context. Eviction removes complete
+oldest exchanges until both limits hold. Serialization is canonical UTF-8 JSON
+with `ensure_ascii=False`, sorted object keys, compact separators, and stable
+chronological ordering.
+
+Successful ordinary provider conversations and successful local Identity,
+Fact, and Goal reads enter recent context. Successfully completed `/goal`,
+`/fact`, and `/remember` interactions enter as `command` exchanges after the
+command has executed and its final response is known. Safe completed no-op
+commands may enter. Malformed, unconfirmed, clarification, known persistence-
+failure, and exception-producing command interactions are excluded.
+`NO_ACTION`, background thought output, internal diagnostics, and deterministic
+command clarifications are excluded.
+
+Historical commands are inert. Only the current user input enters Decision
+Engine parsing. Recent JSON is never passed to a command parser or handler,
+never supplies confirmation, and is appended only after current command
+execution. Provider output has no command authority. A second write requires
+a new explicit current command.
+
+Recent conversation is session-only. Shutdown clears it, restart creates an
+empty session, separate `Nel` instances cannot share it, and no SQLite table,
+schema migration, backup, archive, or JSON persistence contains it. There is
+no automatic promotion to `MemoryService`. An explicit `/remember` interaction
+may exist both as ephemeral command history and as a durable MemoryService
+record; only the latter has durable-memory ownership.
+
+ADR-024 remains the sole authoritative stored-data assembly boundary. Recent
+conversation is serialized independently as bounded JSON and placed in a
+separate prompt section between authoritative context and current user input.
+The current user message never appears in its own prior-history snapshot. The
+maximum measured prompt allocation is 8,192 static/scaffolding characters,
+12,000 authoritative-context characters, 6,000 recent-context characters,
+and 4,096 current-user characters.
+
+Authority order is: current explicit validated command; current structured
+Identity, Facts, and Goals; explicit durable Memory as historical evidence;
+current user request without automatic write authority; recent local reads,
+historical commands, and ordinary dialogue as non-authoritative evidence;
+general provider knowledge for public questions; then clarification. Current
+structured state always overrides stale or conflicting recent text. Ambiguous
+follow-ups cannot create personal facts or mutate goals, identity, or memory.
+
+Provider instructions identify recent conversation as ephemeral and non-
+authoritative, historical commands as already handled and inert, current
+structured state as higher authority, and the current User section as the only
+current request. They prohibit personal-fact invention from ambiguous follow-
+ups, distinguish absent personal state from general world knowledge,
+discourage irrelevant identity repetition, and require clarification when
+ambiguity remains.
+
+Recent context is optional. Snapshot, validation, or serialization failure
+degrades to a bounded `availability: unavailable` recent section and does not
+weaken authoritative safeguards. Safe logs contain no turn text. An accepted
+provider turn that later fails retains only its eligible user turn as an
+incomplete exchange and never writes durable memory. Failed assistant or
+application-error text is not retained.
+
+Required tests cover immutable models, exact limits, deterministic Unicode
+serialization, whole-exchange eviction, previous user and assistant turns,
+current-input separation, session isolation, restart clearing, graceful
+degradation, provider failure, absence of automatic MemoryService writes,
+unchanged authoritative canonical JSON and digest, and production hash
+protection. Command tests cover `/fact` and `/goal` referential follow-ups,
+single execution, stale-command precedence, ephemeral `/remember` history,
+failed-command exclusion, normal budgets, and oversized successful command
+omission.
+
+Deferred scope includes persistent transcripts, cross-session recovery,
+summarization, semantic compression, embeddings, TF-IDF, LinearSVC, model-
+generated memory, automatic memory promotion, tool and background history,
+multimodal turns, provider token counting, and adaptive limits. A future Local
+Understanding Model may consume the current input and immutable bounded recent
+snapshot or derived features, but no classifier logic belongs inside
+Conversation Continuity v1.
+
+Consequences: Short follow-ups gain bounded literal evidence without creating
+durable memory or changing service ownership. Successful command interactions
+support natural references while remaining inert. Prompt size and eviction
+are deterministic. Character counts remain an imperfect token proxy; retained
+literal text can be stale or adversarial; four approximate exchanges may be
+insufficient for long work; and provider rules cannot mathematically validate
+all generated claims without a future response-authority layer.
+
+Status: Accepted.
+
 ## ADR-022: Memory Audit and Retention Policy v1
 
 Context: Nel's active runtime has no `MemoryService`. `Nel.think()` calls the
