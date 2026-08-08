@@ -4,8 +4,9 @@ from src.response_planning.models import ContinuitySource, IdentityPolicy, Perso
 
 
 class ResponsePlanner:
-    _CREATIVE_PREFIXES = ("mahnı yaz", "mahnı sözləri yaz", "hekayə yaz", "şeir yaz")
-    _CONTINUATIONS = frozenset({"davam et", "kədərli olsun", "biraz qısalt", "daha ciddi yaz", "ikincisini dəyiş", "formalaşdır"})
+    _CREATIVE_OBJECTS = frozenset({"mahnı", "hekayə", "şeir", "dialoq"})
+    _CREATIVE_PREDICATES = frozenset({"yaz", "qur"})
+    _CONTINUATIONS = frozenset({"davam et", "kədərli olsun", "biraz qısalt", "daha qısa et", "daha ciddi yaz", "biraz daha ciddi olsun", "ikincisini dəyiş", "formalaşdır"})
 
     def __init__(self, local_intent_classifier=None):
         self.local_intent = local_intent_classifier or LocalIntentClassifier()
@@ -18,7 +19,7 @@ class ResponsePlanner:
             return ResponsePlan(ResponseDelivery.PROVIDER, ResponsePurpose.GENERAL, IdentityPolicy.REQUIRED, PersonalizationPolicy.OPTIONAL_STRUCTURED, ContinuitySource.NONE, ResponseReason.OWN_PREFERENCE_QUERY)
         if self._is_continuation(normalized, recent_snapshot):
             return self._provider(ResponsePurpose.CONTINUATION, ContinuitySource.IMMEDIATE_CONVERSATION, ResponseReason.IMMEDIATE_CONTINUATION)
-        if normalized.startswith(self._CREATIVE_PREFIXES):
+        if self._is_creative_request(normalized):
             return self._provider(ResponsePurpose.CREATIVE, ContinuitySource.NONE, ResponseReason.CREATIVE_REQUEST)
         return self._provider(ResponsePurpose.GENERAL, ContinuitySource.NONE, ResponseReason.GENERAL_INPUT)
 
@@ -35,3 +36,11 @@ class ResponsePlanner:
             return False
         previous = snapshot.exchanges[-1]
         return previous.kind is RecentExchangeKind.CONVERSATION and previous.completion is ExchangeCompletion.COMPLETE
+
+    @classmethod
+    def _is_creative_request(cls, normalized):
+        tokens = frozenset(normalized.split())
+        return bool(
+            tokens.intersection(cls._CREATIVE_OBJECTS)
+            and tokens.intersection(cls._CREATIVE_PREDICATES)
+        )
