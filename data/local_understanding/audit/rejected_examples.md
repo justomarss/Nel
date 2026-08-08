@@ -1,0 +1,107 @@
+# Challenge and Rejected Examples
+
+These records are excluded from standalone clean training. They remain provenance-preserving challenge or review material.
+
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00022`: men ne demisem - Unresolved personal-history retrieval semantics.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00049`: Məqsədimi dəyişmək istəyirəm. - Targetless change request has unresolved ownership.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00050`: dəyiş bunu - Targetless change request has unresolved ownership.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00051`: update elə məlumatımı - Targetless change request has unresolved ownership.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00052`: bunu düzəlt - Targetless change request has unresolved ownership.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00053`: planımı dəyişdim - Targetless change request has unresolved ownership.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00054`: edit elə bunu - Targetless change request has unresolved ownership.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00055`: bunu başqa cür et - Targetless change request has unresolved ownership.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00056`: düzəliş eləmək istəyirəm - Targetless change request has unresolved ownership.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00057`: Bunu sil. - Generic delete request lacks explicit goal ownership; no generic delete intent.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00058`: sil bunu - Generic delete request lacks explicit goal ownership; no generic delete intent.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00059`: bunu delete elə - Generic delete request lacks explicit goal ownership; no generic delete intent.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00060`: məlumatımı clear elə - Generic delete request lacks explicit goal ownership; no generic delete intent.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00061`: bunu aradan qaldır - Generic delete request lacks explicit goal ownership; no generic delete intent.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00062`: qeydimi poz - Generic delete request lacks explicit goal ownership; no generic delete intent.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00063`: bunu sıfırla - Generic delete request lacks explicit goal ownership; no generic delete intent.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00064`: remove elə bunu - Generic delete request lacks explicit goal ownership; no generic delete intent.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00065`: Razıyam. - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00066`: razı - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00067`: hə elə - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00068`: düz deyirsən - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00069`: OK - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00070`: problem yoxdur - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00071`: mənə uyğundur - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00072`: tamam - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00073`: Razı deyiləm. - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00074`: yox - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00075`: belə deyil - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00076`: istəmirəm bunu - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00077`: mənə uyğun deyil - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00078`: belə olmaz - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00079`: yox, başqa cür - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00080`: qəbul etmirəm - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00113`: Təkrar elə. - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00114`: təkrar elə - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00115`: yenə de - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00116`: son dediyini təkrarla - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00117`: nə dedin? - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00118`: repeat elə bunu - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00119`: bir daha izah elə - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00120`: təkrarını istəyirəm - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00135`: indi yox - Ordinary provider interaction; no local pause authority.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00145`: Mən nə demişdim? - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00146`: əvvəl nə dedim? - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00147`: bir az əvvəl nə demişdim? - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00148`: son dediyim nə idi? - Unresolved personal-history retrieval semantics.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00149`: mən nə demişəm? - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00150`: keçən nə dedim? - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00151`: əvvəlki fikrim nə idi? - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00152`: bu söhbətdə nə demişəm? - Context-dependent response/history fragment.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00201`: Niyə? - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00202`: Necə? - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00203`: Nə vaxt? - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00204`: Hansı? - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00205`: Kim? - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00206`: Onda? - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00207`: Bəs? - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00208`: Sonra? - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00209`: İndi? - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00210`: Davam et. - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00211`: davam elə - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00212`: Formalaşdır. - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00213`: formalaşdır - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00214`: Onu de. - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00215`: onu de - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00216`: Əvvəlki. - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00217`: əvvəlki - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00218`: İkincisi. - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00219`: Yox onu demirəm. - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00220`: yox onu demirem - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00221`: Hə elə. - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00222`: hə elə - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00223`: Əslində... - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00224`: əslində - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00225`: Düz deyilsən. - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00226`: Səhv etmişəm. - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00227`: səhv etmişəm - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00228`: Fikrimi dəyişdim. - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00229`: fikrimi dəyişdim - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00230`: Dəyişdim fikrimi. - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00231`: Yenidən düşündüm. - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00232`: Az əvvəl səhv dedim. - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00233`: Daha? - Standalone interpretation unavailable.
+- `preparation/data/source_expression_pool.jsonl` `SRC-batch001-00234`: Hələ? - Standalone interpretation unavailable.
+- `preparation/data/hard_negative_groups.jsonl` `CNTR-follow_up-0001-A`: Niyə? - Context-dependent follow-up fragment; preserved only with its contrast group.
+- `preparation/data/hard_negative_groups.jsonl` `CNTR-follow_up-0001-C`: Bəs? - Context-dependent follow-up fragment; preserved only with its contrast group.
+- `preparation/data/hard_negative_groups.jsonl` `CNTR-follow_up-0001-D`: Davam et. - Context-dependent follow-up fragment; preserved only with its contrast group.
+- `preparation/data/hard_negative_groups.jsonl` `CNTR-follow_up-0001-E`: Onda? - Context-dependent follow-up fragment; preserved only with its contrast group.
+- `preparation/data/context_scenarios.jsonl` `CTX-pronoun_resolution-0001`: O nədir? - Multi-turn scenario retained atomically: Public/general provider conversation.
+- `preparation/data/context_scenarios.jsonl` `CTX-ellipsis_wh-0002`: Niyə? - Multi-turn scenario retained atomically: Provider capability/general conversation.
+- `preparation/data/context_scenarios.jsonl` `CTX-contrastive_follow_up-0003`: Bəs Bleach? - Multi-turn scenario retained atomically: Public/general provider conversation.
+- `preparation/data/context_scenarios.jsonl` `CTX-continuer-0004`: Davam et. - Multi-turn scenario retained atomically: Ordinary provider interaction; no local pause authority.
+- `preparation/data/context_scenarios.jsonl` `CTX-correction_sequence-0005`: Yox, səhv dedim, HxH-dir. - Multi-turn scenario retained atomically: Specific/preference fact inventory query.
+- `preparation/data/context_scenarios.jsonl` `CTX-failed_request_retry-0006`: Başa düşmədim, təkrar elə. - Multi-turn scenario retained atomically: Context-dependent response/history fragment.
+- `preparation/data/context_scenarios.jsonl` `CTX-temporal_follow_up-0007`: Sonra? - Multi-turn scenario retained atomically: Tasks/scheduling are provider work; no local task service exists.
+- `preparation/data/context_scenarios.jsonl` `CTX-anaphoric_one-0008`: Onu sil. - Multi-turn scenario retained atomically: Generic delete request lacks explicit goal ownership; no generic delete intent.
+- `preparation/data/context_scenarios.jsonl` `CTX-specification-0009`: Hansı? - Multi-turn scenario retained atomically: Public/general provider conversation.
+- `preparation/data/context_scenarios.jsonl` `CTX-change_of_mind_sequence-0010`: Yox, qalsın bu gün. - Multi-turn scenario retained atomically: Targetless change request has unresolved ownership.
+- `preparation/data/context_scenarios.jsonl` `CTX-response_dependent-0011`: Oldu. - Multi-turn scenario retained atomically: Context-dependent response/history fragment.
+- `preparation/data/context_scenarios.jsonl` `CTX-ellipsis_noun-0012`: İkincisi. - Multi-turn scenario retained atomically: Context-dependent response/history fragment.
+- `preparation/data/context_scenarios.jsonl` `CTX-negation_reversal-0013`: Yox. - Multi-turn scenario retained atomically: Context-dependent response/history fragment.
+- `preparation/data/context_scenarios.jsonl` `CTX-grounded_correction-0014`: Səhv dedin, C1-dir. - Multi-turn scenario retained atomically: Specific/preference fact inventory query.
+- `preparation/data/context_scenarios.jsonl` `CTX-contrastive_follow_up-0015`: O necə? - Multi-turn scenario retained atomically: Public/general provider conversation.

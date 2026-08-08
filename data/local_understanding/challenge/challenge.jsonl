@@ -1,0 +1,12 @@
+{"id": "CH-001", "reason": "ambiguous_follow_up", "text": "Bəs?"}
+{"id": "CH-002", "reason": "ambiguous_follow_up", "text": "Bəs Bleach?"}
+{"id": "CH-003", "reason": "ambiguous_follow_up", "text": "Bəs GTA?"}
+{"id": "CH-004", "reason": "targetless_write", "text": "Onu dəyiş."}
+{"id": "CH-005", "reason": "targetless_write", "text": "Sil bunu."}
+{"id": "CH-006", "reason": "targetless_write", "text": "Dayandır."}
+{"id": "CH-007", "reason": "personal_history", "text": "Keçən dəfə sənə nə demişdim?"}
+{"id": "CH-008", "reason": "personal_history", "text": "Dünən nə danışmışdıq?"}
+{"id": "CH-009", "reason": "storage_read", "text": "Yaddaşında bu barədə nə var?"}
+{"id": "CH-010", "reason": "mixed_authority", "text": "Məqsədlərimi göstər və bunu yadda saxla."}
+{"id": "CH-011", "reason": "keyword_overlap", "text": "Məqsəd qoymaq haqqında danışaq."}
+{"id": "CH-012", "reason": "question_assertion_ambiguity", "text": "Mən Bleach-i sevirəm?"}

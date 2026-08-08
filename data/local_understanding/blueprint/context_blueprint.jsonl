@@ -1,0 +1,3 @@
+{"category": "SAFE_CONTEXT_ASSISTED", "examples": ["B?s m?qs?dl?rim?"], "rule": "current contains explicit goal noun; context may disambiguate only"}
+{"category": "CONTEXT_REQUIRED", "examples": ["Davam et.", "B?s o?"], "rule": "not clean label training"}
+{"category": "REJECT_AMBIGUOUS", "examples": ["Onu d?yi?.", "Sil bunu.", "B?s Bleach?"], "rule": "never upgrade to write or fact intent from history"}

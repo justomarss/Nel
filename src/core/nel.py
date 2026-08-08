@@ -45,6 +45,14 @@ from src.thoughts import ThoughtCoordinator, ThoughtWorker
 
 from src.brain.intent_classifier import IntentClassifier
 from src.brain.local_intent_classifier import IntentType, LocalIntentClassifier
+from src.response_authority import (
+    AuthorityRequirement,
+    ResponseAuthorityPlan,
+    ResponseAuthorityPlanner,
+    ResponseAuthorityValidator,
+    ResponseMode,
+    ResponseReason,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -99,6 +107,20 @@ FACT_CONTEXT_UNAVAILABLE_RULE = (
     "assert personal facts about the user.\n"
 )
 
+AMBIGUOUS_PERSONAL_FOLLOWUP_CLARIFICATION = (
+    "Bununla nəyi nəzərdə tutduğunu dəqiqləşdir: ümumi məlumat "
+    "soruşursan, yoxsa şəxsi seçiminlə bağlıdır?"
+)
+UNSUPPORTED_PERSONAL_STATE_RESPONSE = (
+    "Bu barədə təsdiqlənmiş strukturlaşdırılmış məlumat yoxdur."
+)
+MIXED_PERSONAL_GENERAL_CLARIFICATION = (
+    "Şəxsi məlumatla ümumi sualı ayrı şəkildə dəqiqləşdir."
+)
+PERSONAL_AUTHORITY_FAILURE_RESPONSE = (
+    "Şəxsi məlumatla bağlı sorğunu dəqiqləşdir."
+)
+
 
 class Nel:
     def __init__(
@@ -114,6 +136,9 @@ class Nel:
         context_budget=None,
         conversation_session=None,
         conversation_serializer=None,
+        local_understanding_shadow=None,
+        response_authority_planner=None,
+        response_authority_validator=None,
     ):
         if memory_service is not None and memory_repository is not None:
             raise ValueError(
@@ -138,6 +163,13 @@ class Nel:
         self.decision = DecisionEngine()
         self.intent = IntentClassifier()
         self.local_intent = LocalIntentClassifier()
+        self.local_understanding_shadow = local_understanding_shadow
+        self.response_authority_planner = (
+            response_authority_planner or ResponseAuthorityPlanner()
+        )
+        self.response_authority_validator = (
+            response_authority_validator or ResponseAuthorityValidator()
+        )
 
         self.knowledge = KnowledgeService(
             self.brain,
@@ -301,7 +333,18 @@ class Nel:
                         )
                     return response
 
+            authority_plan = self._response_authority_plan(prompt)
+            authority_response = self._authority_response(authority_plan)
+            if authority_response is not None:
+                return authority_response
+
             conversation_turn_started = True
+            shadow = getattr(self, "local_understanding_shadow", None)
+            if shadow is not None:
+                try:
+                    shadow.predict(prompt)
+                except Exception:
+                    logger.exception("Local Understanding shadow prediction failed.")
             intent = self.intent.classify(prompt)
 
             if intent == "SEARCH_MEMORY":
@@ -324,6 +367,8 @@ class Nel:
             )
 
             response = self.brain.think(final_prompt)
+            if not self._provider_result_allowed(authority_plan, response):
+                return PERSONAL_AUTHORITY_FAILURE_RESPONSE
             render_proposals = getattr(
                 self.knowledge,
                 "render_proposals",
@@ -481,6 +526,66 @@ class Nel:
                 return serializer.unavailable()
             except Exception:
                 return ConversationContextSerializer().unavailable()
+
+    def _response_authority_plan(self, prompt):
+        # Some legacy unit fixtures construct a minimal Nel without local routes.
+        if getattr(self, "local_intent", None) is None:
+            return ResponseAuthorityPlan(
+                ResponseMode.PROVIDER_GENERAL,
+                AuthorityRequirement.NONE,
+                ResponseReason.GENERAL_CONVERSATION,
+            )
+        snapshot = self._recent_snapshot()
+        planner = getattr(self, "response_authority_planner", None)
+        try:
+            if planner is None:
+                raise ValueError("response_authority_planner_missing")
+            plan = planner.plan(prompt, snapshot)
+            validator = getattr(self, "response_authority_validator", None)
+            if validator is None:
+                raise ValueError("response_authority_validator_missing")
+            validator.validate_plan(plan)
+            return plan
+        except Exception:
+            logger.error("Response authority planning is unavailable.")
+            return ResponseAuthorityPlanner().safe_failure_plan(prompt, snapshot)
+
+    def _recent_snapshot(self):
+        try:
+            session = getattr(self, "conversation_session", None)
+            snapshot = (
+                RecentConversationSnapshot()
+                if session is None
+                else session.snapshot()
+            )
+            if not isinstance(snapshot, RecentConversationSnapshot):
+                raise ValueError("recent_snapshot_invalid")
+            return snapshot
+        except Exception:
+            logger.error("Recent conversation snapshot is unavailable.")
+            return RecentConversationSnapshot()
+
+    @staticmethod
+    def _authority_response(plan):
+        if plan.mode is not ResponseMode.CLARIFY:
+            return None
+        if plan.reason_code is ResponseReason.AMBIGUOUS_PERSONAL_FOLLOWUP:
+            return AMBIGUOUS_PERSONAL_FOLLOWUP_CLARIFICATION
+        if plan.reason_code is ResponseReason.MIXED_PERSONAL_GENERAL_REQUEST:
+            return MIXED_PERSONAL_GENERAL_CLARIFICATION
+        if plan.reason_code is ResponseReason.UNSUPPORTED_PERSONAL_STATE_QUERY:
+            return UNSUPPORTED_PERSONAL_STATE_RESPONSE
+        return PERSONAL_AUTHORITY_FAILURE_RESPONSE
+
+    def _provider_result_allowed(self, plan, response):
+        try:
+            validator = getattr(self, "response_authority_validator", None)
+            if validator is None:
+                raise ValueError("response_authority_validator_missing")
+            return validator.validate_provider_result(plan, response)
+        except Exception:
+            logger.error("Response authority validation is unavailable.")
+            return plan.authority_requirement is AuthorityRequirement.NONE
 
     def _append_recent_complete(self, kind, user_text, assistant_text):
         try:

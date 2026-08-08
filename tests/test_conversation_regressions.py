@@ -257,7 +257,7 @@ class DeterministicArchitectureCharacterizationTests(
         )
         self.assertEqual(provider.structured_prompts, [])
 
-    def test_current_characterization_d2_personal_questions_have_no_authority(self):
+    def test_response_authority_d2_unsupported_personal_questions_do_not_use_provider(self):
         questions = (
             "Mən Gemini istifadə edirəm?",
             "Mən Bleach-i izləmişəm?",
@@ -275,15 +275,12 @@ class DeterministicArchitectureCharacterizationTests(
             finally:
                 nel.stop()
 
-        self.assertEqual(answers, ["Şəxsi vəziyyət cavabı"] * 3)
+        self.assertTrue(all(answer != "Şəxsi vəziyyət cavabı" for answer in answers))
         self.assertEqual(before_facts, {})
         self.assertEqual(after_facts, {})
         self.assertEqual(before_memories, [])
         self.assertEqual(after_memories, [])
-        for prompt in provider.prompts:
-            context = unified_context(prompt)
-            self.assertEqual(context["user_facts"], [])
-            self.assertEqual(context["memories"], [])
+        self.assertEqual(provider.prompts, [])
 
     def test_current_characterization_e2_identity_is_in_unrelated_context(self):
         questions = (
@@ -382,7 +379,7 @@ class SimulatedProviderRiskTests(ConversationRegressionTestCase):
                 self.assertEqual(answer, invention)
                 self.assertEqual(after, before)
 
-    def test_simulated_provider_risk_d_personal_state_invention_passes_through(self):
+    def test_response_authority_d_personal_state_invention_is_blocked(self):
         responses = {
             "Mən Gemini istifadə edirəm?": "Bəli, sən Gemini istifadə edirsən.",
             "Mən Bleach-i izləmişəm?": "Bəli, sən Bleach-i izləmisən.",
@@ -398,7 +395,10 @@ class SimulatedProviderRiskTests(ConversationRegressionTestCase):
             finally:
                 nel.stop()
 
-        self.assertEqual(answers, responses)
+        self.assertTrue(
+            all(answers[question] != invention for question, invention in responses.items())
+        )
+        self.assertEqual(provider.prompts, [])
         self.assertEqual(facts, {})
         self.assertEqual(memories, [])
 
@@ -627,7 +627,6 @@ class FutureConversationContractTests(ConversationRegressionTestCase):
         self.assertTrue(all(GOAL_TITLE in answer for answer in answers))
         self.assertEqual(provider.prompts, [])
 
-    @unittest.expectedFailure
     def test_future_contract_b_anime_invention_is_blocked(self):
         self._assert_conflicting_personal_fact_is_blocked(
             "favorite_anime",
@@ -637,7 +636,6 @@ class FutureConversationContractTests(ConversationRegressionTestCase):
             "Bleach",
         )
 
-    @unittest.expectedFailure
     def test_future_contract_b_game_invention_is_blocked(self):
         self._assert_conflicting_personal_fact_is_blocked(
             "favorite_game",
@@ -655,6 +653,11 @@ class FutureConversationContractTests(ConversationRegressionTestCase):
             nel = self.runtime(directory, provider)
             self.set_authoritative_fact(nel, key, authoritative)
             try:
+                nel.think(
+                    "Mənim ən sevdiyim anime hansıdır?"
+                    if key == "favorite_anime"
+                    else "Mənim ən sevdiyim oyun hansıdır?"
+                )
                 answer = nel.think(followup)
                 facts = nel.knowledge.facts()
             finally:
@@ -940,21 +943,18 @@ class FutureConversationContractTests(ConversationRegressionTestCase):
             current,
         )
 
-    @unittest.expectedFailure
     def test_future_contract_d_absent_gemini_usage_is_not_invented(self):
         self._assert_absent_personal_fact_is_not_invented(
             "Mən Gemini istifadə edirəm?",
             "Bəli, sən Gemini istifadə edirsən.",
         )
 
-    @unittest.expectedFailure
     def test_future_contract_d_absent_bleach_history_is_not_invented(self):
         self._assert_absent_personal_fact_is_not_invented(
             "Mən Bleach-i izləmişəm?",
             "Bəli, sən Bleach-i izləmisən.",
         )
 
-    @unittest.expectedFailure
     def test_future_contract_d_absent_stoic_preference_is_not_invented(self):
         self._assert_absent_personal_fact_is_not_invented(
             "Mən stoik fəlsəfəni sevirəm?",

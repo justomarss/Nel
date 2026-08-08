@@ -2,3 +2,4 @@ google-genai==2.13.0
 openai==2.52.0
 pydantic==2.13.4
 python-dotenv==1.2.2
+scikit-learn==1.8.0

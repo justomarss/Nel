@@ -1,0 +1,196 @@
+{
+  "dataset_sha256": "145df83d57757264e9d4fb2a3a7fdf0ce6693b3bb350067c7ccb28eac67b95b6",
+  "train_seconds": 0.20064929965883493,
+  "config": {
+    "word_ngram_range": [
+      1,
+      2
+    ],
+    "char_ngram_range": [
+      3,
+      5
+    ],
+    "c": 0.7
+  },
+  "thresholds": {
+    "GENERAL_CONVERSATION": -0.43422878429222256,
+    "GOAL_LIST_QUERY": 0.32820386586411554,
+    "GOAL_WRITE_REQUEST": -0.4925445740774327,
+    "IDENTITY_QUERY": -0.0901346967535529,
+    "MEMORY_WRITE_REQUEST": -0.47187092053141017,
+    "PERSONAL_ASSERTION": 0.10405576762108038,
+    "PERSONAL_FACT_QUERY": -0.07489751178554926,
+    "PERSONAL_PROFILE_QUERY": 0.12
+  },
+  "margin_thresholds": {
+    "GENERAL_CONVERSATION": 0.05,
+    "GOAL_LIST_QUERY": 0.05,
+    "GOAL_WRITE_REQUEST": 0.05,
+    "IDENTITY_QUERY": 0.05,
+    "MEMORY_WRITE_REQUEST": 0.05,
+    "PERSONAL_ASSERTION": 0.05,
+    "PERSONAL_FACT_QUERY": 0.05,
+    "PERSONAL_PROFILE_QUERY": 0.05
+  },
+  "test_metrics": {
+    "macro_f1_with_forced_class": 0.9537581699346405,
+    "report": {
+      "GENERAL_CONVERSATION": {
+        "precision": 1.0,
+        "recall": 0.875,
+        "f1-score": 0.9333333333333333,
+        "support": 8.0
+      },
+      "GOAL_LIST_QUERY": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 8.0
+      },
+      "GOAL_WRITE_REQUEST": {
+        "precision": 1.0,
+        "recall": 0.875,
+        "f1-score": 0.9333333333333333,
+        "support": 8.0
+      },
+      "IDENTITY_QUERY": {
+        "precision": 1.0,
+        "recall": 0.875,
+        "f1-score": 0.9333333333333333,
+        "support": 8.0
+      },
+      "MEMORY_WRITE_REQUEST": {
+        "precision": 0.8888888888888888,
+        "recall": 1.0,
+        "f1-score": 0.9411764705882353,
+        "support": 8.0
+      },
+      "PERSONAL_ASSERTION": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 8.0
+      },
+      "PERSONAL_FACT_QUERY": {
+        "precision": 0.8,
+        "recall": 1.0,
+        "f1-score": 0.8888888888888888,
+        "support": 8.0
+      },
+      "PERSONAL_PROFILE_QUERY": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 8.0
+      },
+      "accuracy": 0.953125,
+      "macro avg": {
+        "precision": 0.9611111111111111,
+        "recall": 0.953125,
+        "f1-score": 0.9537581699346405,
+        "support": 64.0
+      },
+      "weighted avg": {
+        "precision": 0.9611111111111111,
+        "recall": 0.953125,
+        "f1-score": 0.9537581699346405,
+        "support": 64.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        7,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        8,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        7,
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        7,
+        0,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        8,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        8,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        8,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        8
+      ]
+    ],
+    "classes": [
+      "GENERAL_CONVERSATION",
+      "GOAL_LIST_QUERY",
+      "GOAL_WRITE_REQUEST",
+      "IDENTITY_QUERY",
+      "MEMORY_WRITE_REQUEST",
+      "PERSONAL_ASSERTION",
+      "PERSONAL_FACT_QUERY",
+      "PERSONAL_PROFILE_QUERY"
+    ],
+    "rejected": 3,
+    "inference_seconds": 0.14616069989278913,
+    "prediction_count": 64
+  }
+}

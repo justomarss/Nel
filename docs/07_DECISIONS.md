@@ -33,6 +33,48 @@ cannot define identity; public-product concerns are deferred.
 
 Status: Accepted.
 
+## ADR-026: Response Authority and Validation v1
+
+Context: ADR-025 gives a provider bounded recent conversation, but provider
+instructions alone do not enforce structured personal-state authority. An
+ambiguous follow-up after a local personal-fact read could therefore expose a
+provider assertion that contradicts a current Fact. Relevance selection can
+also omit a fact from the conversational context. Public questions must remain
+answerable from provider general knowledge even when no user data exists.
+
+Decision: Add a pure, immutable `ResponseAuthorityPlan` after explicit-command
+and deterministic local-read handling, but before ordinary provider prompt
+assembly. Its modes are `local_render`, `provider_general`,
+`provider_guarded`, and `clarify`; its authority requirements are `none`,
+`structured_required`, and `durable_memory_only`. v1 recognizes only narrow,
+deterministic cases: a short `Bəs <candidate>?` contrast after a local
+personal-fact read or preceding personal assertion, and explicit first-person
+personal-state questions that do not reach an existing local read. These cases
+return deterministic clarification or an absence response and never expose
+provider prose. The plan and validator have no service, repository, command,
+or write authority.
+
+Clearly public questions continue through `provider_general`; empty Facts or
+Memory are never evidence that Nel lacks public knowledge. A request that
+deterministically mixes a personal-state question with a public question is
+clarified instead of provider-split. Provider results are accepted only for a
+compatible general plan. Validator failure preserves a general response only
+when no personal authority requirement exists; protected paths fail closed.
+
+This is not a general natural-language claim checker. It does not extract
+arbitrary Azerbaijani claims, validate world knowledge, rewrite provider
+prose, provide targeted fact-key retrieval, or solve identity-expression
+repetition. Local Understanding remains diagnostics-only and cannot select a
+response plan.
+
+Consequences: The recognized local-read plus `Bəs Bleach?` flow cannot return
+a malicious provider assertion that Bleach is the user's favorite when current
+Facts say otherwise, because the provider is never called for that response.
+Provider prose on a clearly general route can still contain an accidental
+personal assertion; universal semantic output validation remains deferred.
+
+Status: Accepted.
+
 ## ADR-021: Natural Language Intent Layer v1
 
 Context: Common Azerbaijani read-only questions should use deterministic local

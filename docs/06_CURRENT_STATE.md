@@ -123,6 +123,12 @@ publication remain explicit operator actions.
   are labeled inert, are appended only after execution, and never enter
   Decision Engine or command parsing. Provider failures retain at most the
   accepted user turn as an incomplete ephemeral exchange.
+- Response Authority v1 runs after explicit commands and deterministic local
+  reads, before ordinary provider generation. It deterministically clarifies
+  recognized ambiguous personal follow-ups and unsupported first-person
+  personal-state questions; public/general questions still use the provider.
+  It has no write authority and does not provide universal provider-prose
+  claim validation or an Expression Engine.
 - Windows stdout and stderr are configured for UTF-8 when supported.
 - Private SQLite data, cutover artifacts, historical JSON, and `.env` are
   ignored by Git.
@@ -138,6 +144,7 @@ publication remain explicit operator actions.
 | Memory | Raw long-term strings; exact lexical relevance and duplicate defense select at most ten complete events, without semantic retrieval |
 | Knowledge | Current values, superseded history, and versioned retirement are transactional; provider candidates are grounded but ephemeral, and durable provenance beyond revision reasons is not implemented |
 | Intent classification | Deterministic phrase rules with deliberately narrow local-read coverage |
+| Local Understanding v1 | Repository-owned TF-IDF/LinearSVC artifact is diagnostics-only shadow infrastructure; it is optional injection, never auto-loaded, and cannot route or write. See `docs/09_LOCAL_UNDERSTANDING_V1_SHADOW.md` |
 | State | Operational state is an in-memory enum; persistent Nel identity is stored separately and is read into prompts without a conversation write path |
 | Thoughts | Minimal in-memory typed observation pipeline is wired; policies reject permanent changes and automatic generation remains disabled by default |
 | Goals | Explicit storage commands and bounded read-only conversation context are integrated; natural-language inference, planning, reminders, scheduling, actions, and autonomous creation remain absent |

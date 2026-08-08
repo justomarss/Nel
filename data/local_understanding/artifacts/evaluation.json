@@ -1,0 +1,93 @@
+{
+  "per_label_acceptance": {
+    "GENERAL_CONVERSATION": {
+      "accepted_precision": 1.0,
+      "accepted_recall": 0.875,
+      "accepted": 7
+    },
+    "GOAL_LIST_QUERY": {
+      "accepted_precision": 1.0,
+      "accepted_recall": 0.875,
+      "accepted": 7
+    },
+    "GOAL_WRITE_REQUEST": {
+      "accepted_precision": 1.0,
+      "accepted_recall": 0.875,
+      "accepted": 7
+    },
+    "IDENTITY_QUERY": {
+      "accepted_precision": 1.0,
+      "accepted_recall": 0.875,
+      "accepted": 7
+    },
+    "MEMORY_WRITE_REQUEST": {
+      "accepted_precision": 0.8888888888888888,
+      "accepted_recall": 1.0,
+      "accepted": 9
+    },
+    "PERSONAL_ASSERTION": {
+      "accepted_precision": 1.0,
+      "accepted_recall": 0.875,
+      "accepted": 7
+    },
+    "PERSONAL_FACT_QUERY": {
+      "accepted_precision": 0.8888888888888888,
+      "accepted_recall": 1.0,
+      "accepted": 9
+    },
+    "PERSONAL_PROFILE_QUERY": {
+      "accepted_precision": 1.0,
+      "accepted_recall": 1.0,
+      "accepted": 8
+    }
+  },
+  "rejection_rate_per_label": {
+    "GENERAL_CONVERSATION": 0.125,
+    "GOAL_LIST_QUERY": 0.125,
+    "GOAL_WRITE_REQUEST": 0.0,
+    "IDENTITY_QUERY": 0.0,
+    "MEMORY_WRITE_REQUEST": 0.0,
+    "PERSONAL_ASSERTION": 0.125,
+    "PERSONAL_FACT_QUERY": 0.0,
+    "PERSONAL_PROFILE_QUERY": 0.0
+  },
+  "challenge_count": 12,
+  "challenge_false_authority_acceptance": 0.0,
+  "challenge_predictions": [
+    "UNKNOWN",
+    "UNKNOWN",
+    "UNKNOWN",
+    "UNKNOWN",
+    "UNKNOWN",
+    "UNKNOWN",
+    "UNKNOWN",
+    "UNKNOWN",
+    "UNKNOWN",
+    "UNKNOWN",
+    "GENERAL_CONVERSATION",
+    "UNKNOWN"
+  ],
+  "hard_negative_count": 16,
+  "hard_negative_forced_accuracy": 1.0,
+  "noisy_acceptance_accuracy": 0.8671875,
+  "context_assisted": [
+    {
+      "case": "goal_follow_up",
+      "prediction": "GOAL_LIST_QUERY",
+      "expected": "GOAL_LIST_QUERY"
+    },
+    {
+      "case": "memory_follow_up",
+      "prediction": "MEMORY_WRITE_REQUEST",
+      "expected": "MEMORY_WRITE_REQUEST"
+    },
+    {
+      "case": "creative_continuation",
+      "prediction": "GENERAL_CONVERSATION",
+      "expected": "UNKNOWN"
+    }
+  ],
+  "cold_load_seconds": 0.07771710027009249,
+  "mean_inference_ms": 2.42625898681581,
+  "artifact_bytes": 436297
+}

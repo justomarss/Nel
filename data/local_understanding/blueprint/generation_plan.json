@@ -1,0 +1,42 @@
+{
+  "GENERAL_CONVERSATION": {
+    "target": 1600,
+    "families": 5,
+    "allocation": "risk-weighted: 4-14 illustrative-source lineages per family; high-risk families receive the upper range"
+  },
+  "GOAL_LIST_QUERY": {
+    "target": 800,
+    "families": 10,
+    "allocation": "risk-weighted: 4-14 illustrative-source lineages per family; high-risk families receive the upper range"
+  },
+  "GOAL_WRITE_REQUEST": {
+    "target": 800,
+    "families": 6,
+    "allocation": "risk-weighted: 4-14 illustrative-source lineages per family; high-risk families receive the upper range"
+  },
+  "IDENTITY_QUERY": {
+    "target": 800,
+    "families": 5,
+    "allocation": "risk-weighted: 4-14 illustrative-source lineages per family; high-risk families receive the upper range"
+  },
+  "MEMORY_WRITE_REQUEST": {
+    "target": 800,
+    "families": 5,
+    "allocation": "risk-weighted: 4-14 illustrative-source lineages per family; high-risk families receive the upper range"
+  },
+  "PERSONAL_ASSERTION": {
+    "target": 800,
+    "families": 5,
+    "allocation": "risk-weighted: 4-14 illustrative-source lineages per family; high-risk families receive the upper range"
+  },
+  "PERSONAL_FACT_QUERY": {
+    "target": 800,
+    "families": 7,
+    "allocation": "risk-weighted: 4-14 illustrative-source lineages per family; high-risk families receive the upper range"
+  },
+  "PERSONAL_PROFILE_QUERY": {
+    "target": 800,
+    "families": 5,
+    "allocation": "risk-weighted: 4-14 illustrative-source lineages per family; high-risk families receive the upper range"
+  }
+}

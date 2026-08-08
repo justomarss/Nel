@@ -1,0 +1,34 @@
+{
+  "source_rows": 240,
+  "targeted_train_rows": 211,
+  "calibration_rows": 95,
+  "final_holdout_rows": 40,
+  "release_holdout_v2_rows": 48,
+  "release_holdout_v3_rows": 48,
+  "release_holdout_v4_rows": 80,
+  "release_holdout_v5_rows": 64,
+  "release_holdout_v6_rows": 64,
+  "release_holdout_v7_rows": 80,
+  "release_holdout_v8_rows": 80,
+  "release_holdout_v9_rows": 64,
+  "hard_negative_v4_rows": 20,
+  "hard_negative_v5_rows": 16,
+  "hard_negative_v7_rows": 16,
+  "hard_negative_v8_rows": 16,
+  "hard_negative_v9_rows": 16,
+  "labels": {
+    "GENERAL_CONVERSATION": 25,
+    "GOAL_LIST_QUERY": 50,
+    "GOAL_WRITE_REQUEST": 30,
+    "IDENTITY_QUERY": 25,
+    "MEMORY_WRITE_REQUEST": 25,
+    "PERSONAL_ASSERTION": 25,
+    "PERSONAL_FACT_QUERY": 35,
+    "PERSONAL_PROFILE_QUERY": 25
+  },
+  "families": 48,
+  "qc": {
+    "exact_duplicates": 0,
+    "normalized_duplicate_groups": 0
+  }
+}

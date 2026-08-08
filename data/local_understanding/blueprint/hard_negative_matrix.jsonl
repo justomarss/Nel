@@ -1,0 +1,144 @@
+{"family_id": "GEN-01", "positive": "GENERAL_CONVERSATION", "negative_example": "Məqsədlərim nədir?"}
+{"family_id": "GEN-01", "positive": "GENERAL_CONVERSATION", "negative_example": "Bunu yadda saxla."}
+{"family_id": "GEN-01", "positive": "GENERAL_CONVERSATION", "negative_example": "Mənim haqqımda nə bilirsən?"}
+{"family_id": "GEN-02", "positive": "GENERAL_CONVERSATION", "negative_example": "C1-i məqsəd kimi əlavə et."}
+{"family_id": "GEN-02", "positive": "GENERAL_CONVERSATION", "negative_example": "Gələcək üçün bunu yadda saxla."}
+{"family_id": "GEN-02", "positive": "GENERAL_CONVERSATION", "negative_example": "Mən hansı dili öyrənirəm?"}
+{"family_id": "GEN-03", "positive": "GENERAL_CONVERSATION", "negative_example": "Mənim ən sevdiyim anime hansıdır?"}
+{"family_id": "GEN-03", "positive": "GENERAL_CONVERSATION", "negative_example": "Mən HxH-ni sevirəm."}
+{"family_id": "GEN-03", "positive": "GENERAL_CONVERSATION", "negative_example": "Mənim sevdiyim kitab nədir?"}
+{"family_id": "GEN-04", "positive": "GENERAL_CONVERSATION", "negative_example": "Sən kimsən?"}
+{"family_id": "GEN-04", "positive": "GENERAL_CONVERSATION", "negative_example": "Adın nədir?"}
+{"family_id": "GEN-04", "positive": "GENERAL_CONVERSATION", "negative_example": "Özünü təqdim et."}
+{"family_id": "GEN-05", "positive": "GENERAL_CONVERSATION", "negative_example": "Bunu yadda saxla."}
+{"family_id": "GEN-05", "positive": "GENERAL_CONVERSATION", "negative_example": "Bu məqsədi dəyiş."}
+{"family_id": "GEN-05", "positive": "GENERAL_CONVERSATION", "negative_example": "Mənim haqqımda xülasə ver."}
+{"family_id": "GLQ-01", "positive": "GOAL_LIST_QUERY", "negative_example": "Məqsədim C1 olmaqdır."}
+{"family_id": "GLQ-01", "positive": "GOAL_LIST_QUERY", "negative_example": "Məqsəd nədir?"}
+{"family_id": "GLQ-01", "positive": "GOAL_LIST_QUERY", "negative_example": "C1-i məqsəd kimi əlavə et."}
+{"family_id": "GLQ-02", "positive": "GOAL_LIST_QUERY", "negative_example": "Məqsədlərimi dəyiş."}
+{"family_id": "GLQ-02", "positive": "GOAL_LIST_QUERY", "negative_example": "Məqsəd siyahısı necə hazırlanır?"}
+{"family_id": "GLQ-02", "positive": "GOAL_LIST_QUERY", "negative_example": "Məqsədimi əlavə et."}
+{"family_id": "GLQ-03", "positive": "GOAL_LIST_QUERY", "negative_example": "Bunu yadda saxla."}
+{"family_id": "GLQ-03", "positive": "GOAL_LIST_QUERY", "negative_example": "Məqsədim C1-dir."}
+{"family_id": "GLQ-03", "positive": "GOAL_LIST_QUERY", "negative_example": "Məqsəd nə üçün lazımdır?"}
+{"family_id": "GLQ-04", "positive": "GOAL_LIST_QUERY", "negative_example": "Hazırda C1 üçün çalışıram."}
+{"family_id": "GLQ-04", "positive": "GOAL_LIST_QUERY", "negative_example": "Hazırda məqsəd qoymaq faydalıdırmı?"}
+{"family_id": "GLQ-04", "positive": "GOAL_LIST_QUERY", "negative_example": "Hazırkı məqsədimi dayandır."}
+{"family_id": "GLQ-05", "positive": "GOAL_LIST_QUERY", "negative_example": "C1-ə çatmağa çalışıram."}
+{"family_id": "GLQ-05", "positive": "GOAL_LIST_QUERY", "negative_example": "İnsan nəyə görə çalışmalıdır?"}
+{"family_id": "GLQ-05", "positive": "GOAL_LIST_QUERY", "negative_example": "C1-ə çatmağı məqsəd kimi əlavə et."}
+{"family_id": "GLQ-06", "positive": "GOAL_LIST_QUERY", "negative_example": "Özümə C1 məqsədi qoymuşam."}
+{"family_id": "GLQ-06", "positive": "GOAL_LIST_QUERY", "negative_example": "Özümə C1 məqsədi qoy."}
+{"family_id": "GLQ-06", "positive": "GOAL_LIST_QUERY", "negative_example": "İnsan özünə məqsəd qoymalıdırmı?"}
+{"family_id": "GLQ-07", "positive": "GOAL_LIST_QUERY", "negative_example": "C1 almağa söz vermişəm."}
+{"family_id": "GLQ-07", "positive": "GOAL_LIST_QUERY", "negative_example": "Mənim haqqımda nə bilirsən?"}
+{"family_id": "GLQ-07", "positive": "GOAL_LIST_QUERY", "negative_example": "Öhdəliklərimi dəyiş."}
+{"family_id": "GLQ-08", "positive": "GOAL_LIST_QUERY", "negative_example": "Gələcəkdə psixiatr olmaq istəyirəm."}
+{"family_id": "GLQ-08", "positive": "GOAL_LIST_QUERY", "negative_example": "Gələcəyini necə planlamalısan?"}
+{"family_id": "GLQ-08", "positive": "GOAL_LIST_QUERY", "negative_example": "Gələcək məqsədimi dəyiş."}
+{"family_id": "GLQ-09", "positive": "GOAL_LIST_QUERY", "negative_example": "Bunu yadda saxla."}
+{"family_id": "GLQ-09", "positive": "GOAL_LIST_QUERY", "negative_example": "Mənim haqqımda nə saxlamısan?"}
+{"family_id": "GLQ-09", "positive": "GOAL_LIST_QUERY", "negative_example": "Keçən dəfə nə demişdim?"}
+{"family_id": "GLQ-10", "positive": "GOAL_LIST_QUERY", "negative_example": "Bunu məqsəd say."}
+{"family_id": "GLQ-10", "positive": "GOAL_LIST_QUERY", "negative_example": "Məqsəd nə vaxt məqsəd olur?"}
+{"family_id": "GLQ-10", "positive": "GOAL_LIST_QUERY", "negative_example": "Məqsədimi tamamla."}
+{"family_id": "GWR-01", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Mən C1 olmaq istəyirəm."}
+{"family_id": "GWR-01", "positive": "GOAL_WRITE_REQUEST", "negative_example": "C1 olmaq istədiyimi yadda saxla."}
+{"family_id": "GWR-01", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Məqsəd qoymaq faydalıdırmı?"}
+{"family_id": "GWR-02", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Məqsədim C1 olmaqdır."}
+{"family_id": "GWR-02", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Əvvəlki fikrimi yadda saxla."}
+{"family_id": "GWR-02", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Məqsədimi göstər."}
+{"family_id": "GWR-03", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Dayandır."}
+{"family_id": "GWR-03", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Məqsədimi tamamla."}
+{"family_id": "GWR-03", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Davam et."}
+{"family_id": "GWR-04", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Məqsədlərim nədir?"}
+{"family_id": "GWR-04", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Məqsədimi dayandır."}
+{"family_id": "GWR-04", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Məqsəd qoymaq necə olur?"}
+{"family_id": "GWR-05", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Əsas məqsədim C1-dir."}
+{"family_id": "GWR-05", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Məqsədlərimi sırala."}
+{"family_id": "GWR-05", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Prioritet seçmək necə olur?"}
+{"family_id": "GWR-06", "positive": "GOAL_WRITE_REQUEST", "negative_example": "C1 olmaq istəyirəm."}
+{"family_id": "GWR-06", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Psixiatr olmaq istədiyimi yadda saxla."}
+{"family_id": "GWR-06", "positive": "GOAL_WRITE_REQUEST", "negative_example": "Arzu ilə məqsədin fərqi nədir?"}
+{"family_id": "IDQ-01", "positive": "IDENTITY_QUERY", "negative_example": "Sən nə edə bilirsən?"}
+{"family_id": "IDQ-01", "positive": "IDENTITY_QUERY", "negative_example": "Mənim haqqımda nə bilirsən?"}
+{"family_id": "IDQ-01", "positive": "IDENTITY_QUERY", "negative_example": "Sənin məqsədin nədir?"}
+{"family_id": "IDQ-02", "positive": "IDENTITY_QUERY", "negative_example": "Mənim adım nədir?"}
+{"family_id": "IDQ-02", "positive": "IDENTITY_QUERY", "negative_example": "Ad seçmək necə olur?"}
+{"family_id": "IDQ-02", "positive": "IDENTITY_QUERY", "negative_example": "Sənə ad verə bilərəm?"}
+{"family_id": "IDQ-03", "positive": "IDENTITY_QUERY", "negative_example": "Nə edə bildiyini izah et."}
+{"family_id": "IDQ-03", "positive": "IDENTITY_QUERY", "negative_example": "Mənim haqqımda danış."}
+{"family_id": "IDQ-03", "positive": "IDENTITY_QUERY", "negative_example": "Süni intellekti izah et."}
+{"family_id": "IDQ-04", "positive": "IDENTITY_QUERY", "negative_example": "Süni intellekt nədir?"}
+{"family_id": "IDQ-04", "positive": "IDENTITY_QUERY", "negative_example": "Necə işləyirsən?"}
+{"family_id": "IDQ-04", "positive": "IDENTITY_QUERY", "negative_example": "Hansı modeldən istifadə edirsən?"}
+{"family_id": "IDQ-05", "positive": "IDENTITY_QUERY", "negative_example": "Sən ChatGPT-sən?"}
+{"family_id": "IDQ-05", "positive": "IDENTITY_QUERY", "negative_example": "Sən Gemini-san?"}
+{"family_id": "IDQ-05", "positive": "IDENTITY_QUERY", "negative_example": "Kod yaza bilirsən?"}
+{"family_id": "MWR-01", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "Mən HxH-ni sevirəm."}
+{"family_id": "MWR-01", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "C1-i məqsəd kimi əlavə et."}
+{"family_id": "MWR-01", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "Yaddaş necə işləyir?"}
+{"family_id": "MWR-02", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "Sənin yaddaş sistemin necə işləyir?"}
+{"family_id": "MWR-02", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "Mənim haqqımda nə saxlamısan?"}
+{"family_id": "MWR-02", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "Mənim məlumatımı dəyiş."}
+{"family_id": "MWR-03", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "Gələcək üçün necə plan qurum?"}
+{"family_id": "MWR-03", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "Mən gitara öyrənirəm."}
+{"family_id": "MWR-03", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "Gələcək məqsədimi əlavə et."}
+{"family_id": "MWR-04", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "Mən səhərlər qaçıram."}
+{"family_id": "MWR-04", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "Yadda saxlamaq insan üçün niyə vacibdir?"}
+{"family_id": "MWR-04", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "Mənim haqqımda nə bilirsən?"}
+{"family_id": "MWR-05", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "Əslində HxH-ni daha çox sevirəm."}
+{"family_id": "MWR-05", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "Əvvəlkini sil."}
+{"family_id": "MWR-05", "positive": "MEMORY_WRITE_REQUEST", "negative_example": "C1 məqsədimi B2 ilə dəyiş."}
+{"family_id": "PAS-01", "positive": "PERSONAL_ASSERTION", "negative_example": "Mən hansı oyunu sevirəm?"}
+{"family_id": "PAS-01", "positive": "PERSONAL_ASSERTION", "negative_example": "HxH yaxşı animedir."}
+{"family_id": "PAS-01", "positive": "PERSONAL_ASSERTION", "negative_example": "Bunu yadda saxla."}
+{"family_id": "PAS-02", "positive": "PERSONAL_ASSERTION", "negative_example": "Mən hansı dili öyrənirəm?"}
+{"family_id": "PAS-02", "positive": "PERSONAL_ASSERTION", "negative_example": "Hazırda nəyə çatmağa çalışıram?"}
+{"family_id": "PAS-02", "positive": "PERSONAL_ASSERTION", "negative_example": "Python necə öyrənilir?"}
+{"family_id": "PAS-03", "positive": "PERSONAL_ASSERTION", "negative_example": "C1-i məqsəd kimi əlavə et."}
+{"family_id": "PAS-03", "positive": "PERSONAL_ASSERTION", "negative_example": "C1 olmaq istədiyimi yadda saxla."}
+{"family_id": "PAS-03", "positive": "PERSONAL_ASSERTION", "negative_example": "C1-ə necə çatmaq olar?"}
+{"family_id": "PAS-04", "positive": "PERSONAL_ASSERTION", "negative_example": "Mən nəyi bacarıram?"}
+{"family_id": "PAS-04", "positive": "PERSONAL_ASSERTION", "negative_example": "Linux nədir?"}
+{"family_id": "PAS-04", "positive": "PERSONAL_ASSERTION", "negative_example": "Mənim hansı cihazım var?"}
+{"family_id": "PAS-05", "positive": "PERSONAL_ASSERTION", "negative_example": "Əslində HxH-ni sevirəm, yadda saxla."}
+{"family_id": "PAS-05", "positive": "PERSONAL_ASSERTION", "negative_example": "Məqsədimi B2 ilə dəyiş."}
+{"family_id": "PAS-05", "positive": "PERSONAL_ASSERTION", "negative_example": "Mən hansı sistemi istifadə edirəm?"}
+{"family_id": "PFQ-01", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Ən sevdiyim anime HxH-dir."}
+{"family_id": "PFQ-01", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Bleach necə animedir?"}
+{"family_id": "PFQ-01", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Mənim haqqımda nə bilirsən?"}
+{"family_id": "PFQ-02", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Mən MK11-i sevirəm."}
+{"family_id": "PFQ-02", "positive": "PERSONAL_FACT_QUERY", "negative_example": "İnsanlar hansı oyunu sevir?"}
+{"family_id": "PFQ-02", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Mənim haqqımda nə bilirsən?"}
+{"family_id": "PFQ-03", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Mən alman dili öyrənirəm."}
+{"family_id": "PFQ-03", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Hazırda nəyə çatmağa çalışıram?"}
+{"family_id": "PFQ-03", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Alman dili necə öyrənilir?"}
+{"family_id": "PFQ-04", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Mən hər səhər oxuyuram."}
+{"family_id": "PFQ-04", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Sağlam rutin necə qurulur?"}
+{"family_id": "PFQ-04", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Mənim haqqımda nə bilirsən?"}
+{"family_id": "PFQ-05", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Python nə üçün istifadə olunur?"}
+{"family_id": "PFQ-05", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Mən Python istifadə edirəm."}
+{"family_id": "PFQ-05", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Məni necə tanıyırsan?"}
+{"family_id": "PFQ-06", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Keçən dəfə hansı oyunu demişdim?"}
+{"family_id": "PFQ-06", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Dünən nə danışmışdıq?"}
+{"family_id": "PFQ-06", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Mənim haqqımda nə bilirsən?"}
+{"family_id": "PFQ-07", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Mən Bleach-i sevirəm."}
+{"family_id": "PFQ-07", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Bleach-i sevirsən?"}
+{"family_id": "PFQ-07", "positive": "PERSONAL_FACT_QUERY", "negative_example": "Bleach necə animedir?"}
+{"family_id": "PPQ-01", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "Mənim ən sevdiyim anime haqqında nə bilirsən?"}
+{"family_id": "PPQ-01", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "İnsan haqqında profil necə hazırlanır?"}
+{"family_id": "PPQ-01", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "Keçən dəfə mənim haqqımda nə danışmışdıq?"}
+{"family_id": "PPQ-02", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "Mən necə biriyəm?"}
+{"family_id": "PPQ-02", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "Sən necə bir Aİ-san?"}
+{"family_id": "PPQ-02", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "Mən alman dili öyrənirəm."}
+{"family_id": "PPQ-03", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "Bu mətni ümumiləşdir."}
+{"family_id": "PPQ-03", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "Mənim sevdiyim kitab nədir?"}
+{"family_id": "PPQ-03", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "Məqsədlərimi sadala."}
+{"family_id": "PPQ-04", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "Yaddaşında bu barədə nə var?"}
+{"family_id": "PPQ-04", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "Bunu yadda saxla."}
+{"family_id": "PPQ-04", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "Keçən dəfə nə demişdim?"}
+{"family_id": "PPQ-05", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "Sən nə qədər bilirsən?"}
+{"family_id": "PPQ-05", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "İnsan haqqında nə qədər məlumat toplamaq olar?"}
+{"family_id": "PPQ-05", "positive": "PERSONAL_PROFILE_QUERY", "negative_example": "Mənim hansı dili öyrəndiyimi bilirsən?"}
